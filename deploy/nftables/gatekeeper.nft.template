@@ -2,26 +2,26 @@
 
 table inet gatekeeper {
   set allowed_v4 {
-    type ipv4_addr
-    flags interval
+    type ipv4_addr;
+    flags interval;
     __INITIAL_IPV4_ELEMENTS__
   }
 
   set allowed_v6 {
-    type ipv6_addr
-    flags interval
+    type ipv6_addr;
+    flags interval;
     __INITIAL_IPV6_ELEMENTS__
   }
 
   set protected_tcp_ports {
-    type inet_service
-    flags interval
+    type inet_service;
+    flags interval;
     __INITIAL_TCP_PORT_ELEMENTS__
   }
 
   set protected_udp_ports {
-    type inet_service
-    flags interval
+    type inet_service;
+    flags interval;
     __INITIAL_UDP_PORT_ELEMENTS__
   }
 
