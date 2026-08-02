@@ -8,8 +8,8 @@
 - 后台查看用户、网段和审计记录，设置受保护的 TCP/UDP 端口或端口范围。
 - 后台显示上报 IP、网段、国家/地区/城市、运营商、服务器公网 IP 和用户历史 IP。
 - 支持清空单个用户当前网段而保留历史记录。
-- 支持删除用户、拉黑 `/24` 或 `/64` 网段，以及添加不占用户槽位的永久放行 IP；黑名单始终优先。
-- 客户端 API 按用户限制访问频率，默认最短间隔 60 秒，可在后台立即修改。
+- 支持删除用户、拉黑 `/24` 或 `/64` 网段、添加全局网段或指定用户网段，以及添加不占用户槽位的永久放行 IP；黑名单始终优先。
+- 客户端 API 按“用户 + 设备”独立限制访问频率，后台可查看每个用户的设备、最近 IP 和上报时间。
 - 后台可修改管理员账号和密码，不限制密码最短位数；密码使用 scrypt 加盐哈希保存，修改后所有后台会话立即失效。
 - 后台仅在安装时生成的自定义路径开放，直接访问域名根路径返回 404。
 - 后台为每个用户生成独立的 Surge 一键安装地址。
@@ -75,6 +75,8 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 ```bash
 curl -X POST https://你的域名/api/v1/whitelist \
   -H "Authorization: Bearer awl_你的密钥" \
+  -H "X-Gatekeeper-Device-ID: laptop_main" \
+  -H "X-Gatekeeper-Device-Name: My Laptop" \
   -H "Content-Type: application/json" \
   -d '{"source":"laptop"}'
 ```
@@ -88,7 +90,7 @@ curl https://你的域名/api/v1/whitelist \
 
 更多字段见 [API 参考](docs/API.md)。
 
-同一用户的 `POST`、`GET` 和 Surge 上报共用一个请求间隔，默认 60 秒，可在后台“系统设置”修改。超限时 API 返回 `Retry-After`；Surge 模块会将其转换为“请求过于频繁，请在 N 秒后重试”，不会向面板显示 429 或其他 HTTP 代码。不同用户互不影响。
+请求间隔按“用户 + `X-Gatekeeper-Device-ID`”独立计算，默认 60 秒，可在后台“系统设置”修改。每台 Surge 会在首次运行时生成并持久化独立设备 ID；手动 API 客户端应为每台设备使用稳定且唯一的 ID。未提供时归入 `legacy` 默认设备。超限时 API 返回 `Retry-After`；Surge 面板显示可读的失败原因，不显示 429 等 HTTP 代码。
 
 ## Surge 自动添加
 
@@ -100,9 +102,15 @@ curl https://你的域名/api/v1/whitelist \
 
 每个用户的模块地址都包含独立的签名授权令牌，不需要填写或暴露该用户原来的 `awl_` API Key。该地址应当像密码一样保管，不要公开分享。停用用户后，对应模块地址和授权令牌会立即失效；重新启用后原地址恢复可用。修改 `FIREWALL_SYNC_TOKEN` 会使全部既有 Surge 专属地址失效，需要从后台重新获取。
 
+> 从旧版升级后，需从后台对每台 Surge **最后覆盖安装一次**，以获取自动脚本更新和独立设备 ID 配置。完成这次迁移后，后续脚本更新不再需要重装模块。
+
+后台“全局规则”可选择两种网段归属：“所有用户”作为全局规则、不占用户配额；“单独用户”记入该用户并占用配额。需要注意，nftables 只能看到连接的来源 IP，无法识别应用层用户；因此任何生效的用户网段在受保护端口上都会放行该来源网段。
+
 专属模块会：
 
 - 按安装模块时设置的分钟周期自动上报（默认 3 分钟，建议使用 3、5、10、15、30 或 60）。
+- 以稳定 URL 安装，并每 300 秒检查远程脚本更新；今后更新脚本无需重复安装模块。
+- 首次运行会持久化本机设备 ID，后台可按用户查看已使用的设备，不同设备的请求频率互不影响。
 - 网络切换时立即上报。
 - 在 Surge 的策略页面提供“Gatekeeper”面板，点击面板右上角刷新按钮即可手动上报。
 - 将 Gatekeeper API 域名设为直连，避免代理出口导致识别到错误 IP。
@@ -125,6 +133,7 @@ https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/ga
 - `key`：后台创建的 `awl_` 开头 API Key。
 - `interval`：自动上报间隔分钟，默认 `3`。
 - `cooldown`：本地防重复上报秒数，默认 `30`，应不小于后台 API 请求间隔。
+- `device`：设备在后台中显示的名称；设备 ID 由 Surge 自动生成并保存。
 
 公共模板同样会在 `network-changed` 事件和自定义周期中上报，并提供手动刷新面板。Surge 会先通过 `64.ipcheck.ing/geo` 获取真实出口 IP 和地区信息，再提交给 Gatekeeper；服务端会将出口 IPv4 转为 `/24`，同一网段重复上报不会占用新槽位。
 

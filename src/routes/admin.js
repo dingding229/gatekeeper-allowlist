@@ -233,6 +233,74 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
     }
   });
 
+  router.post("/network-rules/whitelist", adminAuth, (req, res, next) => {
+    const raw = String(req.body?.ip || "").trim();
+    const normalized = normalizeNetwork(raw);
+    if (!normalized) return res.status(400).json({ error: "invalid_ip" });
+    if (repository.isNetworkBlocked(normalized.network)) {
+      return res.status(409).json({
+        error: "network_blacklisted",
+        network: normalized.network,
+      });
+    }
+    const scope = req.body?.scope === "user" ? "user" : "global";
+    const label = String(req.body?.label || "")
+      .trim()
+      .slice(0, 80);
+    try {
+      if (scope === "global") {
+        const id = repository.addGlobalNetwork(
+          normalized.network,
+          normalized.family,
+          label,
+        );
+        return res.status(201).json({
+          ok: true,
+          id,
+          scope,
+          network: normalized.network,
+        });
+      }
+      const userId = validId(req.body?.userId);
+      if (!userId) return res.status(400).json({ error: "invalid_user_id" });
+      const user = repository.findUserById(userId, true);
+      if (!user) return res.status(404).json({ error: "user_not_found" });
+      const observedIp = normalizeIp(raw.split("/")[0]);
+      const result = repository.addIp(
+        userId,
+        observedIp,
+        normalized.network,
+        normalized.family,
+        "admin",
+      );
+      return res.status(result.status === "added" ? 201 : 200).json({
+        ok: true,
+        scope,
+        network: normalized.network,
+        status: result.status,
+        evicted: result.evicted,
+      });
+    } catch (error) {
+      if (String(error.message).includes("UNIQUE")) {
+        return res.status(409).json({ error: "network_already_whitelisted" });
+      }
+      return next(error);
+    }
+  });
+
+  router.delete(
+    "/network-rules/whitelist/global/:id",
+    adminAuth,
+    (req, res) => {
+      const id = validId(req.params.id);
+      if (!id) return res.status(400).json({ error: "invalid_rule_id" });
+      if (!repository.removeGlobalNetwork(id)) {
+        return res.status(404).json({ error: "rule_not_found" });
+      }
+      return res.json({ ok: true });
+    },
+  );
+
   router.delete("/network-rules/blacklist/:id", adminAuth, (req, res) => {
     const id = validId(req.params.id);
     if (!id) return res.status(400).json({ error: "invalid_rule_id" });

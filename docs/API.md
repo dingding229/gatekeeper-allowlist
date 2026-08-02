@@ -8,6 +8,8 @@
 
 ```http
 Authorization: Bearer awl_xxx
+X-Gatekeeper-Device-ID: laptop_main
+X-Gatekeeper-Device-Name: My Laptop
 ```
 
 ```http
@@ -64,9 +66,11 @@ Authorization: Bearer awl_xxx
 
 `ips` 中的每一项还包含 `source`、创建时间和最后上报时间。
 
-## 访问频率
+## 设备识别与访问频率
 
-同一用户的全部客户端接口共用请求间隔，默认 60 秒，管理员可在后台“系统设置”立即修改。API Key 与该用户的 Surge 专属令牌计入同一个限额。超限时返回：
+客户端可通过 `X-Gatekeeper-Device-ID` 提供 3–64 位的稳定设备 ID（仅允许字母、数字、`_` 和 `-`），并通过 `X-Gatekeeper-Device-Name` 提供后台显示名称。也可在 JSON 中使用 `deviceId` 和 `deviceName`。未提供 ID 的旧客户端统一归入 `legacy` 设备。
+
+请求间隔按“用户 + 设备 ID”独立计算，默认 60 秒，管理员可在后台立即修改。同一用户的不同 Surge 设备互不卡住；同一设备的 API Key 和 Surge 专属令牌仍共用限额。超限时返回：
 
 ```http
 HTTP/1.1 429 Too Many Requests
@@ -102,7 +106,8 @@ GET /health
 | 401 | `missing_api_key` | 未提供 Key |
 | 401 | `invalid_api_key` | Key 错误、已轮换或用户已停用 |
 | 403 | `network_blacklisted` | 该 IP 所属网段已被管理员拉黑 |
-| 429 | `rate_limit_exceeded` | 该用户在管理员设置的最短间隔内已访问客户端 API |
+| 400 | `invalid_device_id` | 设备 ID 格式无效 |
+| 429 | `rate_limit_exceeded` | 该用户的该设备在最短间隔内已访问客户端 API |
 | 500 | `internal_error` | 服务端异常 |
 
 管理员接口供自带 Web 后台使用，通过 HttpOnly 会话 Cookie 鉴权，不作为公开集成接口。防火墙快照和版本通知接口只允许本机访问，Caddy 对公网统一返回 404。用户新增、淘汰、移除、清空、启停和端口设置变更后，宿主机即时同步服务会刷新 nftables；每分钟定时器作为失败兜底。

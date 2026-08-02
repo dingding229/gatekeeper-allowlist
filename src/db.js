@@ -66,6 +66,28 @@ const schema = `
     last_request_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS user_devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'api',
+    last_ip TEXT,
+    first_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    last_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(user_id, device_key)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_user_devices_user_seen
+    ON user_devices(user_id, last_seen_at DESC);
+
+  CREATE TABLE IF NOT EXISTS api_device_rate_limits (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_key TEXT NOT NULL,
+    last_request_at INTEGER NOT NULL,
+    PRIMARY KEY(user_id, device_key)
+  );
+
   CREATE TABLE IF NOT EXISTS blocked_networks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     network TEXT NOT NULL UNIQUE,
@@ -77,6 +99,14 @@ const schema = `
   CREATE TABLE IF NOT EXISTS permanent_whitelist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ip TEXT NOT NULL UNIQUE,
+    family INTEGER NOT NULL CHECK (family IN (4, 6)),
+    label TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS global_whitelist_networks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    network TEXT NOT NULL UNIQUE,
     family INTEGER NOT NULL CHECK (family IN (4, 6)),
     label TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

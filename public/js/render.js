@@ -18,6 +18,8 @@ const actionNames = {
   "network.unblocked": "解除拉黑",
   "permanent.added": "永久放行",
   "permanent.removed": "移除永久放行",
+  "global_network.added": "添加全局网段",
+  "global_network.removed": "移除全局网段",
 };
 
 const locationText = (ip) =>
@@ -51,12 +53,28 @@ function renderIpRows(ips) {
     .join("");
 }
 
-function renderUser(user, allIps) {
+function renderDevices(devices) {
+  if (!devices.length) return '<div class="empty">尚未识别到设备</div>';
+  return `<div class="audit-list">${devices
+    .map(
+      (device) => `<div class="audit-row">
+        <strong>${escapeHtml(device.name)}</strong>
+        <small>${escapeHtml(device.source)} · ${escapeHtml(device.last_ip || "IP 未知")} · ID ${escapeHtml(device.device_key.slice(0, 16))}…</small>
+        <time>${formatTime(device.last_seen_at)}</time>
+      </div>`,
+    )
+    .join("")}</div>`;
+}
+
+function renderUser(user, allIps, allDevices) {
   const ips = allIps
     .filter((ip) => ip.user_id === user.id)
     .sort(
       (left, right) => new Date(left.created_at) - new Date(right.created_at),
     );
+  const devices = (allDevices || []).filter(
+    (device) => device.user_id === user.id,
+  );
 
   return `
     <article class="user-row" data-user="${user.id}">
@@ -77,6 +95,8 @@ function renderUser(user, allIps) {
       </div>
       <div class="ip-details hidden">
         <table class="ip-table"><tbody>${renderIpRows(ips)}</tbody></table>
+        <h3>已识别设备</h3>
+        ${renderDevices(devices)}
         <div class="row-actions">
           <label class="limit-control">网段配额
             <input type="number" min="1" max="100" value="${user.ip_limit}" data-limit-input="${user.id}">
@@ -117,6 +137,15 @@ export function renderDashboard(state, query = "") {
     state.applicationSettings?.apiRateLimitSeconds || 60;
   document.querySelector("#adminUsername").value =
     state.applicationSettings?.adminUsername || "admin";
+  document.querySelector("#whitelistUser").innerHTML = state.users.length
+    ? state.users
+        .filter((user) => user.enabled)
+        .map(
+          (user) =>
+            `<option value="${user.id}">${escapeHtml(user.name)}</option>`,
+        )
+        .join("")
+    : '<option value="">暂无启用用户</option>';
 
   const normalizedQuery = query.trim().toLowerCase();
   const users = state.users.filter((user) => {
@@ -128,7 +157,7 @@ export function renderDashboard(state, query = "") {
   });
 
   document.querySelector("#userList").innerHTML = users.length
-    ? users.map((user) => renderUser(user, state.ips)).join("")
+    ? users.map((user) => renderUser(user, state.ips, state.devices)).join("")
     : '<div class="empty">没有匹配的用户</div>';
 
   document.querySelector("#auditList").innerHTML = state.audit.length
@@ -166,6 +195,15 @@ export function renderDashboard(state, query = "") {
         )
         .join("")
     : '<div class="empty">暂无永久放行 IP</div>';
+  document.querySelector("#globalWhitelistList").innerHTML = state
+    .globalWhitelist?.length
+    ? state.globalWhitelist
+        .map(
+          (row) =>
+            `<div class="audit-row"><code>${escapeHtml(row.network)}</code><small>所有用户 · ${escapeHtml(row.label || "无备注")}</small><button class="danger-link" data-remove-global-network="${row.id}">移除</button></div>`,
+        )
+        .join("")
+    : '<div class="empty">暂无全局白名单网段</div>';
 }
 
 export function renderHistory(rows) {

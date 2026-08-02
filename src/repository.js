@@ -122,6 +122,7 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
          updated_at = excluded.updated_at`,
       ).run(String(seconds));
       db.prepare("DELETE FROM api_rate_limits").run();
+      db.prepare("DELETE FROM api_device_rate_limits").run();
       insertAudit.run(null, "settings.api_rate", null, `${seconds}s`);
       return seconds;
     },
@@ -314,25 +315,53 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       );
     },
 
+    touchUserDevice(userId, deviceKey, name, ip, source = "api") {
+      db.prepare(
+        `INSERT INTO user_devices
+         (user_id, device_key, name, source, last_ip)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, device_key) DO UPDATE SET
+           name = excluded.name,
+           source = excluded.source,
+           last_ip = excluded.last_ip,
+           last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+      ).run(userId, deviceKey, name, source, ip || null);
+    },
+
+    listUserDevices(userId) {
+      return db
+        .prepare(
+          `SELECT id, device_key, name, source, last_ip,
+                  first_seen_at, last_seen_at
+           FROM user_devices WHERE user_id = ?
+           ORDER BY last_seen_at DESC, id DESC`,
+        )
+        .all(userId);
+    },
+
     consumeApiRequest(
       userId,
       now = Date.now(),
       windowMs = API_RATE_LIMIT_WINDOW_MS,
+      deviceKey = "legacy",
     ) {
       if (windowMs <= 0) return { allowed: true, retryAfter: 0 };
       const result = db
         .prepare(
-          `INSERT INTO api_rate_limits (user_id, last_request_at) VALUES (?, ?)
-           ON CONFLICT(user_id) DO UPDATE SET last_request_at = excluded.last_request_at
-           WHERE api_rate_limits.last_request_at <= excluded.last_request_at - ?`,
+          `INSERT INTO api_device_rate_limits
+           (user_id, device_key, last_request_at) VALUES (?, ?, ?)
+           ON CONFLICT(user_id, device_key) DO UPDATE
+           SET last_request_at = excluded.last_request_at
+           WHERE api_device_rate_limits.last_request_at <= excluded.last_request_at - ?`,
         )
-        .run(userId, now, windowMs);
+        .run(userId, deviceKey, now, windowMs);
       if (result.changes) return { allowed: true, retryAfter: 0 };
       const last = db
         .prepare(
-          "SELECT last_request_at FROM api_rate_limits WHERE user_id = ?",
+          `SELECT last_request_at FROM api_device_rate_limits
+           WHERE user_id = ? AND device_key = ?`,
         )
-        .get(userId).last_request_at;
+        .get(userId, deviceKey).last_request_at;
       return {
         allowed: false,
         retryAfter: Math.max(1, Math.ceil((last + windowMs - now) / 1000)),
@@ -379,6 +408,13 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
            ORDER BY a.id DESC LIMIT 100`,
         )
         .all();
+      const devices = db
+        .prepare(
+          `SELECT d.id, d.user_id, d.device_key, d.name, d.source, d.last_ip,
+                  d.first_seen_at, d.last_seen_at
+           FROM user_devices d ORDER BY d.last_seen_at DESC, d.id DESC`,
+        )
+        .all();
 
       return {
         users,
@@ -386,6 +422,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         audit,
         blockedNetworks: this.listBlockedNetworks(),
         permanentWhitelist: this.listPermanentWhitelist(),
+        globalWhitelist: this.listGlobalWhitelist(),
+        devices,
         settings: this.getFirewallSettings(),
         applicationSettings: {
           apiRateLimitSeconds: this.getApiRateLimitWindowMs() / 1000,
@@ -511,6 +549,9 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         .run(sha256(apiKey), apiKey.slice(0, 10), userId);
       if (!result.changes) return null;
       db.prepare("DELETE FROM api_rate_limits WHERE user_id = ?").run(userId);
+      db.prepare("DELETE FROM api_device_rate_limits WHERE user_id = ?").run(
+        userId,
+      );
       insertAudit.run(userId, "key.rotated", null, null);
       return apiKey;
     },
@@ -621,6 +662,9 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         const removedUsers = db
           .prepare("DELETE FROM whitelist_ips WHERE ip = ?")
           .run(network).changes;
+        const removedGlobal = db
+          .prepare("DELETE FROM global_whitelist_networks WHERE network = ?")
+          .run(network).changes;
         const permanent = db
           .prepare("SELECT id, ip FROM permanent_whitelist")
           .all();
@@ -636,14 +680,14 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
           null,
           "network.blocked",
           network,
-          `${reason || ""}; removed=${removedUsers + removedPermanent}`,
+          `${reason || ""}; removed=${removedUsers + removedPermanent + removedGlobal}`,
         );
         revision = bumpFirewallRevision();
         db.exec("COMMIT");
         notifyFirewallChange(revision);
         return {
           id: Number(result.lastInsertRowid),
-          removed: removedUsers + removedPermanent,
+          removed: removedUsers + removedPermanent + removedGlobal,
         };
       } catch (error) {
         db.exec("ROLLBACK");
@@ -692,6 +736,38 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       return true;
     },
 
+    listGlobalWhitelist() {
+      return db
+        .prepare(
+          `SELECT id, network, family, label, created_at
+           FROM global_whitelist_networks ORDER BY id DESC`,
+        )
+        .all();
+    },
+
+    addGlobalNetwork(network, family, label = "") {
+      const result = db
+        .prepare(
+          `INSERT INTO global_whitelist_networks (network, family, label)
+           VALUES (?, ?, ?)`,
+        )
+        .run(network, family, label || null);
+      insertAudit.run(null, "global_network.added", network, label || null);
+      notifyFirewallChange(bumpFirewallRevision());
+      return Number(result.lastInsertRowid);
+    },
+
+    removeGlobalNetwork(id) {
+      const row = db
+        .prepare("SELECT network FROM global_whitelist_networks WHERE id = ?")
+        .get(id);
+      if (!row) return false;
+      db.prepare("DELETE FROM global_whitelist_networks WHERE id = ?").run(id);
+      insertAudit.run(null, "global_network.removed", row.network, null);
+      notifyFirewallChange(bumpFirewallRevision());
+      return true;
+    },
+
     getFirewallRevision() {
       return Number(
         db
@@ -712,7 +788,10 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       const permanent = this.listPermanentWhitelist().filter(
         (row) => !this.isNetworkBlocked(normalizeNetwork(row.ip)?.network),
       );
-      const allRows = [...rows, ...permanent];
+      const global = this.listGlobalWhitelist()
+        .filter((row) => !this.isNetworkBlocked(row.network))
+        .map((row) => ({ ...row, ip: row.network }));
+      const allRows = [...rows, ...permanent, ...global];
       const settings = this.getFirewallSettings();
       return {
         generatedAt: new Date().toISOString(),

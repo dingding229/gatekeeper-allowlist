@@ -9,9 +9,15 @@ const script = readFileSync(
 );
 
 function runSurge({ initialStore = {}, postResponse } = {}) {
-  const store = new Map(Object.entries(initialStore));
+  const store = new Map(
+    Object.entries({
+      gatekeeper_device_id_sg_test: "device_test_01",
+      ...initialStore,
+    }),
+  );
   let result;
   let requests = 0;
+  let postOptions;
   const context = {
     $argument:
       "url=https%3A%2F%2Fallowlist.example.com&key=sg_test&cooldown=30",
@@ -36,6 +42,7 @@ function runSurge({ initialStore = {}, postResponse } = {}) {
         );
       },
       post: (_options, callback) => {
+        postOptions = _options;
         requests += 1;
         callback(
           null,
@@ -56,7 +63,7 @@ function runSurge({ initialStore = {}, postResponse } = {}) {
     },
   };
   vm.runInNewContext(script, context);
-  return { result, requests, store };
+  return { result, requests, store, postOptions };
 }
 
 test("Surge translates rate limiting into a clear reason without status codes", () => {
@@ -73,7 +80,7 @@ test("Surge translates rate limiting into a clear reason without status codes", 
 test("Surge suppresses overlapping triggers during the local cooldown", () => {
   const future = Date.now() + 20_000;
   const { result, requests } = runSurge({
-    initialStore: { gatekeeper_next_report_sg_test: String(future) },
+    initialStore: { gatekeeper_next_report_device_test_01: String(future) },
   });
   assert.equal(requests, 0);
   assert.match(result.content, /刚刚已经触发过上报/);
@@ -96,6 +103,15 @@ test("Surge learns the current server cooldown after a successful report", () =>
     },
   });
   assert.ok(
-    Number(store.get("gatekeeper_next_report_sg_test")) >= before + 89_000,
+    Number(store.get("gatekeeper_next_report_device_test_01")) >=
+      before + 89_000,
   );
+});
+
+test("Surge sends a stable per-installation device identity", () => {
+  const { postOptions } = runSurge();
+  const payload = JSON.parse(postOptions.body);
+  assert.equal(postOptions.headers["X-Gatekeeper-Device-ID"], "device_test_01");
+  assert.equal(payload.deviceId, "device_test_01");
+  assert.equal(payload.deviceName, "Surge");
 });

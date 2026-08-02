@@ -249,7 +249,8 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   assert.match(moduleText, /#!arguments=interval:"3"/);
   assert.match(moduleText, /cronexp="\*\/\{\{\{interval\}\}\}/);
   assert.match(moduleText, /cooldown=1/);
-  assert.doesNotMatch(moduleText, /update-interval=/);
+  assert.match(moduleText, /device=\{\{\{device\}\}\}/);
+  assert.match(moduleText, /script-update-interval=300/);
   assert.match(moduleText, /\[Panel\]/);
   assert.match(moduleText, /点击右上角刷新按钮手动加白/);
 
@@ -295,6 +296,107 @@ test("client API is limited to one request per user per minute", async (t) => {
   assert.equal(blocked.headers.get("ratelimit-limit"), "1");
   assert.match(blocked.headers.get("retry-after"), /^\d+$/);
   assert.equal((await blocked.json()).error, "rate_limit_exceeded");
+});
+
+test("API frequency is isolated per device and devices appear in overview", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t, {
+    apiRateLimitWindowMs: 60_000,
+  });
+  const user = repository.createUser("multi-device-client");
+  const request = (deviceId, deviceName) =>
+    fetch(`${baseUrl}/api/v1/whitelist`, {
+      headers: {
+        Authorization: `Bearer ${user.apiKey}`,
+        "X-Gatekeeper-Device-ID": deviceId,
+        "X-Gatekeeper-Device-Name": deviceName,
+      },
+    });
+
+  assert.equal((await request("device_phone", "Phone")).status, 200);
+  assert.equal((await request("device_tablet", "Tablet")).status, 200);
+  assert.equal((await request("device_phone", "Phone")).status, 429);
+
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const overview = await (
+    await fetch(`${baseUrl}/api/admin/overview`, {
+      headers: { Cookie: cookie },
+    })
+  ).json();
+  assert.deepEqual(overview.devices.map((device) => device.name).sort(), [
+    "Phone",
+    "Tablet",
+  ]);
+});
+
+test("admin can add global and user-scoped whitelist networks", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const owner = repository.createUser("network-owner");
+  const other = repository.createUser("network-other");
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const headers = { Cookie: cookie, "Content-Type": "application/json" };
+
+  const globalResponse = await fetch(
+    `${baseUrl}/api/admin/network-rules/whitelist`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        ip: "203.0.113.8",
+        scope: "global",
+        label: "shared office",
+      }),
+    },
+  );
+  assert.equal(globalResponse.status, 201);
+  const globalRule = await globalResponse.json();
+  assert.equal(globalRule.network, "203.0.113.0/24");
+
+  const ownedResponse = await fetch(
+    `${baseUrl}/api/admin/network-rules/whitelist`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        ip: "198.51.100.19",
+        scope: "user",
+        userId: owner.id,
+      }),
+    },
+  );
+  assert.equal(ownedResponse.status, 201);
+  assert.deepEqual(
+    repository.listUserIps(owner.id).map((row) => row.ip),
+    ["198.51.100.0/24"],
+  );
+  assert.deepEqual(repository.listUserIps(other.id), []);
+  assert.deepEqual(repository.getFirewallSnapshot().ipv4, [
+    "198.51.100.0/24",
+    "203.0.113.0/24",
+  ]);
+
+  const overview = await (
+    await fetch(`${baseUrl}/api/admin/overview`, {
+      headers: { Cookie: cookie },
+    })
+  ).json();
+  assert.equal(overview.globalWhitelist[0].label, "shared office");
+
+  const deletion = await fetch(
+    `${baseUrl}/api/admin/network-rules/whitelist/global/${globalRule.id}`,
+    { method: "DELETE", headers },
+  );
+  assert.equal(deletion.status, 200);
+  assert.deepEqual(repository.getFirewallSnapshot().ipv4, ["198.51.100.0/24"]);
 });
 
 test("admin manages blacklist, permanent IPs, and user deletion", async (t) => {

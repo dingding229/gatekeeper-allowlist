@@ -24,8 +24,19 @@ var config = argumentsFromSurge();
 var baseUrl = String(config.url || "").replace(/\/+$/, "");
 var apiKey = String(config.key || "");
 var keySuffix = apiKey.slice(-16).replace(/[^A-Za-z0-9_-]/g, "");
-var STATE_KEY = "gatekeeper_allowlist_state_" + keySuffix;
-var NEXT_REPORT_KEY = "gatekeeper_next_report_" + keySuffix;
+var DEVICE_ID_STORE_KEY = "gatekeeper_device_id_" + keySuffix;
+var deviceId = String($persistentStore.read(DEVICE_ID_STORE_KEY) || "");
+if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) {
+  deviceId =
+    "surge_" +
+    Date.now().toString(36) +
+    "_" +
+    Math.random().toString(36).slice(2, 12);
+  $persistentStore.write(deviceId, DEVICE_ID_STORE_KEY);
+}
+var deviceName = String(config.device || "Surge").trim().slice(0, 64) || "Surge";
+var STATE_KEY = "gatekeeper_allowlist_state_" + deviceId;
+var NEXT_REPORT_KEY = "gatekeeper_next_report_" + deviceId;
 var cooldownSeconds = parseInt(config.cooldown || "30", 10);
 if (!isFinite(cooldownSeconds) || cooldownSeconds < 1) cooldownSeconds = 30;
 
@@ -71,7 +82,11 @@ if (
     );
 
     function report(ipInfo, ipInfoError) {
-      var payload = { source: "surge" };
+      var payload = {
+        source: "surge",
+        deviceId: deviceId,
+        deviceName: deviceName,
+      };
       if (ipInfo && ipInfo.ip) {
         payload.ip = ipInfo.ip;
         payload.ipInfo = ipInfo;
@@ -82,6 +97,7 @@ if (
           headers: {
             Authorization: "Bearer " + apiKey,
             "Content-Type": "application/json",
+            "X-Gatekeeper-Device-ID": deviceId,
           },
           body: JSON.stringify(payload),
           timeout: 15,

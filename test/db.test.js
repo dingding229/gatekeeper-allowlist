@@ -50,6 +50,15 @@ test("legacy databases gain user quotas and history without data loss", (t) => {
   assert.doesNotThrow(() =>
     migrated.prepare("SELECT count(*) FROM ip_history").get(),
   );
+  assert.doesNotThrow(() =>
+    migrated.prepare("SELECT count(*) FROM user_devices").get(),
+  );
+  assert.doesNotThrow(() =>
+    migrated.prepare("SELECT count(*) FROM api_device_rate_limits").get(),
+  );
+  assert.doesNotThrow(() =>
+    migrated.prepare("SELECT count(*) FROM global_whitelist_networks").get(),
+  );
   assert.equal(
     migrated
       .prepare("SELECT value FROM settings WHERE key = 'firewall_revision'")

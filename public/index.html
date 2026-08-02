@@ -65,7 +65,7 @@
           </article>
           <article>
             <span>生效网段</span><strong id="statIps">—</strong
-            ><small>跨全部用户</small>
+            ><small>用户上报的网段</small>
           </article>
           <article class="capacity server-card">
             <span>当前服务器公网 IP</span><strong id="serverIps">—</strong
@@ -103,6 +103,35 @@
               <p>黑名单优先级最高；永久 IP 不占用户网段槽位</p>
             </div>
           </div>
+          <form id="whitelistNetworkForm" class="settings-form">
+            <h3>添加白名单网段</h3>
+            <label
+              >IP 或网段<input
+                name="ip"
+                placeholder="例如：203.0.113.8（自动转换为 /24）"
+                required
+            /></label>
+            <label
+              >作用范围
+              <select id="whitelistScope" name="scope">
+                <option value="global">所有用户（全局规则）</option>
+                <option value="user">单独用户</option>
+              </select>
+            </label>
+            <label
+              >目标用户
+              <select id="whitelistUser" name="userId" disabled></select>
+            </label>
+            <label
+              >备注<input name="label" maxlength="80" placeholder="可选"
+            /></label>
+            <p class="muted">
+              全局网段不占用户配额；单独用户网段计入该用户配额。服务器防火墙按来源
+              IP 放行，无法识别连接属于哪个后台用户。
+            </p>
+            <button class="primary" type="submit">添加白名单网段</button>
+          </form>
+          <div id="globalWhitelistList" class="audit-list"></div>
           <form id="blacklistForm" class="settings-form">
             <h3>拉黑网段</h3>
             <label
@@ -171,7 +200,7 @@
           <form id="apiRateForm" class="settings-form">
             <h3>API 访问频率</h3>
             <label
-              >每个用户最短请求间隔（秒）
+              >每台设备最短请求间隔（秒）
               <input
                 id="apiRateLimitSeconds"
                 type="number"

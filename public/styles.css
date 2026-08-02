@@ -85,7 +85,8 @@ label {
   font-size: 13px;
   font-weight: 600;
 }
-input {
+input,
+select {
   width: 100%;
   margin-top: 7px;
   padding: 12px 13px;
@@ -96,7 +97,8 @@ input {
   font: inherit;
   outline: none;
 }
-input:focus {
+input:focus,
+select:focus {
   border-color: var(--green2);
   box-shadow: 0 0 0 3px rgba(36, 148, 106, 0.12);
 }

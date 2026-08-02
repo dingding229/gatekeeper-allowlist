@@ -2,7 +2,14 @@ import { apiRequest } from "./api.js";
 import { renderDashboard, renderHistory } from "./render.js";
 
 const $ = (selector) => document.querySelector(selector);
-let state = { users: [], ips: [], audit: [], settings: {}, stats: {} };
+let state = {
+  users: [],
+  ips: [],
+  devices: [],
+  audit: [],
+  settings: {},
+  stats: {},
+};
 
 function showToast(message) {
   const toast = $("#toast");
@@ -310,6 +317,9 @@ async function submitRuleForm(event, path) {
   try {
     await apiRequest(path, { method: "POST", body: JSON.stringify(body) });
     event.target.reset();
+    if (event.target.id === "whitelistNetworkForm") {
+      $("#whitelistUser").disabled = true;
+    }
     showToast("规则已保存，正在同步防火墙");
     await loadDashboard();
   } catch (error) {
@@ -324,17 +334,26 @@ async function submitRuleForm(event, path) {
 $("#blacklistForm").addEventListener("submit", (event) =>
   submitRuleForm(event, "/api/admin/network-rules/blacklist"),
 );
+$("#whitelistNetworkForm").addEventListener("submit", (event) =>
+  submitRuleForm(event, "/api/admin/network-rules/whitelist"),
+);
+$("#whitelistScope").addEventListener("change", (event) => {
+  $("#whitelistUser").disabled = event.target.value !== "user";
+});
 $("#permanentForm").addEventListener("submit", (event) =>
   submitRuleForm(event, "/api/admin/network-rules/permanent"),
 );
 $("#rulesTab").addEventListener("click", async (event) => {
   const unblock = event.target.closest("[data-unblock]");
   const permanent = event.target.closest("[data-remove-permanent]");
-  if (!unblock && !permanent) return;
+  const globalNetwork = event.target.closest("[data-remove-global-network]");
+  if (!unblock && !permanent && !globalNetwork) return;
   if (!window.confirm("确定移除这条规则？")) return;
   const path = unblock
     ? `/api/admin/network-rules/blacklist/${unblock.dataset.unblock}`
-    : `/api/admin/network-rules/permanent/${permanent.dataset.removePermanent}`;
+    : permanent
+      ? `/api/admin/network-rules/permanent/${permanent.dataset.removePermanent}`
+      : `/api/admin/network-rules/whitelist/global/${globalNetwork.dataset.removeGlobalNetwork}`;
   try {
     await apiRequest(path, { method: "DELETE" });
     showToast("规则已移除");

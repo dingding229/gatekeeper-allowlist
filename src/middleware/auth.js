@@ -13,10 +13,36 @@ export function createAuthMiddleware({ repository, config }) {
         ? repository.findUserById(surgeUserId, true)
         : repository.findEnabledUserByApiKey(apiKey);
       if (!user) return res.status(401).json({ error: "invalid_api_key" });
+      const suppliedDeviceKey =
+        req.get("x-gatekeeper-device-id") || req.body?.deviceId;
+      const deviceKey = String(suppliedDeviceKey || "legacy").trim();
+      if (!/^[A-Za-z0-9_-]{3,64}$/.test(deviceKey)) {
+        return res.status(400).json({ error: "invalid_device_id" });
+      }
+      const deviceName =
+        String(
+          req.get("x-gatekeeper-device-name") ||
+            req.body?.deviceName ||
+            (deviceKey === "legacy" ? "默认 API 客户端" : "未命名设备"),
+        )
+          .trim()
+          .slice(0, 64) || "未命名设备";
+      const source =
+        String(req.body?.source || "api")
+          .trim()
+          .slice(0, 32) || "api";
+      repository.touchUserDevice(
+        user.id,
+        deviceKey,
+        deviceName,
+        req.ip,
+        source,
+      );
       const rate = repository.consumeApiRequest(
         user.id,
         Date.now(),
         repository.getApiRateLimitWindowMs(),
+        deviceKey,
       );
       res.set("RateLimit-Limit", "1");
       if (!rate.allowed) {
@@ -31,6 +57,7 @@ export function createAuthMiddleware({ repository, config }) {
       }
       res.set("RateLimit-Remaining", "0");
       req.user = user;
+      req.device = { key: deviceKey, name: deviceName };
       next();
     },
 
