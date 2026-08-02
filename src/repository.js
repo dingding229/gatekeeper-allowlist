@@ -321,7 +321,7 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
     touchUserDevice(userId, deviceKey, name, ip, source = "api") {
       const existing = db
         .prepare(
-          "SELECT id FROM user_devices WHERE user_id = ? AND device_key = ?",
+          "SELECT id, last_ip FROM user_devices WHERE user_id = ? AND device_key = ?",
         )
         .get(userId, deviceKey);
       if (!existing) {
@@ -348,6 +348,11 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
            last_ip = excluded.last_ip,
            last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
       ).run(userId, deviceKey, name, source, ip || null);
+      return {
+        created: !existing,
+        ipChanged: Boolean(existing && ip && existing.last_ip !== ip),
+        previousIp: existing?.last_ip || null,
+      };
     },
 
     listUserDevices(userId) {
@@ -381,8 +386,18 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       now = Date.now(),
       windowMs = API_RATE_LIMIT_WINDOW_MS,
       deviceKey = "legacy",
+      { allowImmediate = false } = {},
     ) {
       if (windowMs <= 0) return { allowed: true, retryAfter: 0 };
+      if (allowImmediate) {
+        db.prepare(
+          `INSERT INTO api_device_rate_limits
+           (user_id, device_key, last_request_at) VALUES (?, ?, ?)
+           ON CONFLICT(user_id, device_key) DO UPDATE
+           SET last_request_at = excluded.last_request_at`,
+        ).run(userId, deviceKey, now);
+        return { allowed: true, retryAfter: 0 };
+      }
       const result = db
         .prepare(
           `INSERT INTO api_device_rate_limits

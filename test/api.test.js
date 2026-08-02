@@ -497,6 +497,31 @@ test("API frequency is isolated per device and devices appear in overview", asyn
   ]);
 });
 
+test("a device can report immediately when its trusted source IP changes", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t, {
+    apiRateLimitWindowMs: 60_000,
+    trustProxy: true,
+  });
+  const user = repository.createUser("roaming-device");
+  const request = (ip) =>
+    fetch(`${baseUrl}/api/v1/whitelist`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${user.apiKey}`,
+        "X-Gatekeeper-Device-ID": "roaming_phone",
+        "X-Forwarded-For": ip,
+      },
+    });
+
+  assert.equal((await request("203.0.113.10")).status, 201);
+  assert.equal((await request("203.0.113.10")).status, 429);
+  assert.equal((await request("198.51.100.20")).status, 201);
+  assert.deepEqual(
+    repository.listUserIps(user.id).map((item) => item.ip),
+    ["203.0.113.0/24", "198.51.100.0/24"],
+  );
+});
+
 test("admin can add global and user-scoped whitelist networks", async (t) => {
   const { baseUrl, repository } = await startTestApp(t);
   const owner = repository.createUser("network-owner");

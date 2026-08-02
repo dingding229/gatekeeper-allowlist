@@ -58,8 +58,9 @@ export function createAuthMiddleware({ repository, config }) {
           });
         }
       }
+      let deviceStatus;
       try {
-        repository.touchUserDevice(
+        deviceStatus = repository.touchUserDevice(
           user.id,
           deviceKey,
           deviceName,
@@ -80,6 +81,7 @@ export function createAuthMiddleware({ repository, config }) {
         Date.now(),
         repository.getApiRateLimitWindowMs(),
         deviceKey,
+        { allowImmediate: Boolean(deviceStatus?.ipChanged) },
       );
       res.set("RateLimit-Limit", "1");
       if (!rate.allowed) {

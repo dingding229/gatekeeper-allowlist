@@ -23,6 +23,7 @@ function runSurge({
   lookupIp = "8.8.8.8",
   lookupError = null,
   environment = { system: "iOS", "device-model": "iPhone17,1" },
+  trigger = { type: "cron", name: "gatekeeper_1_cron" },
 } = {}) {
   const store = new Map(
     Object.entries({
@@ -38,6 +39,7 @@ function runSurge({
   const context = {
     $argument: `url=https%3A%2F%2Fallowlist.example.com&key=sg_test&cooldown=30&moduleVersion=${SURGE_MODULE_VERSION}`,
     $environment: environment,
+    $script: trigger,
     $persistentStore: {
       read: (key) => store.get(key) || null,
       write: (value, key) => {
@@ -161,6 +163,16 @@ test("Surge suppresses overlapping triggers during the local cooldown", () => {
   });
   assert.equal(requests, 0);
   assert.match(result.content, /刚刚已经触发过上报/);
+});
+
+test("Surge network change events bypass the local cooldown", () => {
+  const future = Date.now() + 20_000;
+  const { requests, posts } = runSurge({
+    initialStore: { gatekeeper_next_report_device_test_01: String(future) },
+    trigger: { type: "event", name: "gatekeeper_1_event" },
+  });
+  assert.equal(requests, 2);
+  assert.equal(posts, 1);
 });
 
 test("Surge learns the current server cooldown after a successful report", () => {

@@ -1,6 +1,6 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
-var SCRIPT_VERSION = "1.2.5";
+var SCRIPT_VERSION = "1.2.6";
 
 function argumentsFromSurge() {
   var result = {};
@@ -50,6 +50,11 @@ var deviceName = [deviceModel || "Surge", surgeSystem]
   .slice(0, 64);
 var STATE_KEY = "gatekeeper_allowlist_state_" + deviceId;
 var NEXT_REPORT_KEY = "gatekeeper_next_report_" + deviceId;
+var scriptContext =
+  typeof $script === "object" && $script ? $script : {};
+var isNetworkChange =
+  String(scriptContext.type || "") === "event" ||
+  /_event$/.test(String(scriptContext.name || ""));
 var cooldownSeconds = parseInt(config.cooldown || "30", 10);
 if (!isFinite(cooldownSeconds) || cooldownSeconds < 1) cooldownSeconds = 30;
 
@@ -128,7 +133,7 @@ if (
 } else {
   var now = Date.now();
   var nextAllowedAt = Number($persistentStore.read(NEXT_REPORT_KEY) || 0);
-  if (nextAllowedAt > now) {
+  if (nextAllowedAt > now && !isNetworkChange) {
     finish(
       "Gatekeeper：无需重复上报",
       "刚刚已经触发过上报，" +
