@@ -111,7 +111,7 @@ curl https://你的域名/api/v1/whitelist \
 
 专属模块会：
 
-- 按安装模块时设置的分钟周期自动上报（默认 3 分钟，建议使用 3、5、10、15、30 或 60）。
+- 每 10 分钟自动检查一次（可设置为 10、15、30 或 60 分钟），网络切换时仍会立即触发。
 - 严格参考 po0fw 的提交逻辑：每次有效触发都调用 Gatekeeper API，服务器以请求来源 IP 为准并幂等处理重复网段；Surge 再按 `/24` 或 `/64` 校验当前网段已出现在返回的白名单中，未命中时显示“加白未生效”。
 - 以稳定 URL 安装，并每 300 秒检查远程脚本更新；今后更新脚本无需重复安装模块。
 - 首次运行会持久化本机设备 ID，后台可按用户查看已使用的设备，不同设备的请求频率互不影响。
@@ -135,7 +135,7 @@ https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/ga
 - `domain`：仅填写域名，如 `allowlist.example.com`。
 - `url`：填写完整 HTTPS 地址，如 `https://allowlist.example.com`。
 - `key`：后台创建的 `awl_` 开头 API Key。
-- `interval`：自动上报间隔分钟，默认 `3`。
+- `interval`：自动检查间隔分钟，默认 `10`。
 - `cooldown`：本地防重复上报秒数，默认 `30`，应不小于后台 API 请求间隔。
 - `device`：设备在后台中显示的名称；设备 ID 由 Surge 自动生成并保存。
 

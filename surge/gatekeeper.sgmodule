@@ -2,7 +2,7 @@
 #!desc=每次定时、网络切换或面板触发都上报，并校验当前网段已出现在 Gatekeeper 白名单中。
 #!category=Gatekeeper
 #!author=dingding229
-#!arguments=domain:"",url:"",key:"",interval:"3",cooldown:"30",device:"Surge"
+#!arguments=domain:"",url:"",key:"",interval:"10",cooldown:"30",device:"Surge"
 #!arguments-desc=domain: Gatekeeper 域名（不含 https://）；url: 完整站点地址（例如 https://allowlist.example.com）；key: awl_ 开头的 API Key；interval: 上报间隔分钟；cooldown: 防重复上报秒数；device: 后台显示的设备名称
 
 [Rule]

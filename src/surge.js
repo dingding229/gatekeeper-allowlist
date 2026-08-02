@@ -22,8 +22,8 @@ export function renderSurgeModule({
 #!desc=${label} 专属网段自动加白；每次都上报并校验当前网段已出现在服务器白名单中。
 #!category=Gatekeeper
 #!author=dingding229
-#!arguments=interval:"3",device:"Surge"
-#!arguments-desc=interval: 自动上报间隔分钟（建议 3、5、10、15、30 或 60）；device: 后台显示的设备名称
+#!arguments=interval:"10",device:"Surge"
+#!arguments-desc=interval: 自动检查间隔分钟（默认 10，建议 10、15、30 或 60）；device: 后台显示的设备名称
 
 [Rule]
 DOMAIN,${hostname},DIRECT,extended-matching
