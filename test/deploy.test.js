@@ -53,6 +53,10 @@ const backupTimer = readFileSync(
   new URL("../deploy/systemd/gatekeeper-backup.timer", import.meta.url),
   "utf8",
 );
+const dockerfile = readFileSync(
+  new URL("../Dockerfile", import.meta.url),
+  "utf8",
+);
 
 test("nftables policy covers host input and Docker forwarded ports", () => {
   assert.match(template, /hook input/);
@@ -115,6 +119,10 @@ test("deployment installs validated off-volume backups and restore tooling", () 
   assert.match(backupTimer, /OnCalendar=/);
   assert.match(installer, /gatekeeper-backup\.timer/);
   assert.match(updater, /gatekeeper-backup\.timer/);
+});
+
+test("production image includes the versioned Surge client", () => {
+  assert.match(dockerfile, /COPY surge \.\/surge/);
 });
 
 test("updater bypasses source caches and verifies the running version", () => {

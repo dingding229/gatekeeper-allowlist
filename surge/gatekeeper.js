@@ -1,6 +1,6 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
-var SCRIPT_VERSION = "1.2.4";
+var SCRIPT_VERSION = "1.2.5";
 
 function argumentsFromSurge() {
   var result = {};
@@ -58,7 +58,11 @@ function apiFailureReason(error, data) {
   var code = data && data.error;
   if (code === "module_update_required") {
     return (
-      "版本不兼容：需要模块 v" +
+      "版本不兼容：当前模块 v" +
+      String(data.receivedModuleVersion || moduleVersion || "未知") +
+      "、脚本 v" +
+      String(data.receivedScriptVersion || SCRIPT_VERSION || "未知") +
+      "；需要模块 v" +
       String(data.requiredModuleVersion || "最新") +
       "、脚本 v" +
       String(data.requiredScriptVersion || "最新")
@@ -183,7 +187,7 @@ if (
               var updateReason = reason + "\n点击本通知打开最新模块安装页。";
               $notification.post(
                 "Gatekeeper 必须更新",
-                "旧模块已被服务端拒绝",
+                "模块或脚本版本未匹配",
                 updateReason,
                 { action: "open-url", url: moduleInstallUrl() },
               );

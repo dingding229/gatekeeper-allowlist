@@ -98,6 +98,8 @@ test("server rejects incompatible Surge module and script versions", async (t) =
   assert.equal(error.error, "module_update_required");
   assert.equal(error.requiredModuleVersion, SURGE_MODULE_VERSION);
   assert.equal(error.requiredScriptVersion, SURGE_SCRIPT_VERSION);
+  assert.equal(error.receivedModuleVersion, "1.1.0");
+  assert.equal(error.receivedScriptVersion, "1.1.0");
   assert.equal(repository.listUserDevices(user.id).length, 0);
 
   const compatible = await request(SURGE_MODULE_VERSION, SURGE_SCRIPT_VERSION);
@@ -309,8 +311,32 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   assert.match(moduleText, /cronexp="\*\/10 \* \* \* \*"/);
   assert.match(moduleText, /cooldown=1/);
   assert.match(moduleText, /script-update-interval=300/);
+  assert.match(
+    moduleText,
+    new RegExp(
+      `/api/v1/surge/client/${SURGE_SCRIPT_VERSION.replaceAll(".", "\\.")}/gatekeeper\\.js`,
+    ),
+  );
   assert.match(moduleText, /\[Panel\]/);
   assert.match(moduleText, /点击右上角刷新上报当前 IP/);
+
+  const clientResponse = await fetch(
+    `${baseUrl}/api/v1/surge/client/${SURGE_SCRIPT_VERSION}/gatekeeper.js`,
+  );
+  assert.equal(clientResponse.status, 200);
+  assert.equal(clientResponse.headers.get("cache-control"), "no-store");
+  assert.equal(
+    clientResponse.headers.get("x-gatekeeper-surge-script-version"),
+    SURGE_SCRIPT_VERSION,
+  );
+  assert.match(
+    await clientResponse.text(),
+    new RegExp(`var SCRIPT_VERSION = "${SURGE_SCRIPT_VERSION}"`),
+  );
+  assert.equal(
+    (await fetch(`${baseUrl}/api/v1/surge/client/0.0.0/gatekeeper.js`)).status,
+    404,
+  );
 
   const surgeToken = moduleUrl.pathname.split("/").at(-2);
   const tamperedPath = moduleUrl.pathname.replace(

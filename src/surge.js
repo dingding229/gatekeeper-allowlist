@@ -1,7 +1,5 @@
 import { SURGE_MODULE_VERSION, SURGE_SCRIPT_VERSION } from "./version.js";
 
-const SCRIPT_URL = `https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=${SURGE_SCRIPT_VERSION}`;
-
 const safeLabel = (value) =>
   String(value || "user")
     .replace(/[\r\n,="\\]/g, " ")
@@ -15,6 +13,7 @@ export function renderSurgeModule({
   cooldownSeconds = 30,
 }) {
   const hostname = new URL(publicBaseUrl).hostname;
+  const scriptUrl = `${publicBaseUrl}/api/v1/surge/client/${SURGE_SCRIPT_VERSION}/gatekeeper.js`;
   const label = safeLabel(user.name);
   const suffix = user.id;
   const moduleUrl = `${publicBaseUrl}/api/v1/surge/${encodeURIComponent(token)}/module.sgmodule`;
@@ -30,9 +29,9 @@ DOMAIN,${hostname},DIRECT,extended-matching
 DOMAIN,64.ipcheck.ing,DIRECT,extended-matching
 
 [Script]
-gatekeeper_${suffix}_cron = type=cron,cronexp="*/10 * * * *",script-path=${SCRIPT_URL},script-update-interval=300,timeout=30,argument="${argument}"
-gatekeeper_${suffix}_event = type=event,event-name=network-changed,script-path=${SCRIPT_URL},script-update-interval=300,timeout=30,argument="${argument}"
-gatekeeper_${suffix}_panel_script = type=generic,script-path=${SCRIPT_URL},script-update-interval=300,timeout=30,argument="${argument}"
+gatekeeper_${suffix}_cron = type=cron,cronexp="*/10 * * * *",script-path=${scriptUrl},script-update-interval=300,timeout=30,argument="${argument}"
+gatekeeper_${suffix}_event = type=event,event-name=network-changed,script-path=${scriptUrl},script-update-interval=300,timeout=30,argument="${argument}"
+gatekeeper_${suffix}_panel_script = type=generic,script-path=${scriptUrl},script-update-interval=300,timeout=30,argument="${argument}"
 
 [Panel]
 gatekeeper_${suffix}_panel = title="Gatekeeper · ${label} · v${SURGE_MODULE_VERSION}",content="点击右上角刷新上报当前 IP",style=info,script-name=gatekeeper_${suffix}_panel_script

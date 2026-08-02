@@ -121,11 +121,20 @@ test("Surge provides a one-tap module update when versions are rejected", () => 
         error: "module_update_required",
         requiredModuleVersion: SURGE_MODULE_VERSION,
         requiredScriptVersion: SURGE_SCRIPT_VERSION,
+        receivedModuleVersion: "1.2.4",
+        receivedScriptVersion: "1.2.3",
       },
     },
   });
   assert.match(result.title, /必须更新/);
   assert.match(result.content, /版本不兼容/);
+  assert.match(result.content, /当前模块 v1\.2\.4、脚本 v1\.2\.3/);
+  assert.match(
+    result.content,
+    new RegExp(
+      `需要模块 v${SURGE_MODULE_VERSION.replaceAll(".", "\\.")}、脚本 v${SURGE_SCRIPT_VERSION.replaceAll(".", "\\.")}`,
+    ),
+  );
   const updateNotification = notifications.find(
     (items) => items[0] === "Gatekeeper 必须更新",
   );
