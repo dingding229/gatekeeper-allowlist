@@ -127,6 +127,49 @@ $("#firewallForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("#apiRateForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const result = await apiRequest("/api/admin/settings/api-rate", {
+      method: "PATCH",
+      body: JSON.stringify({
+        seconds: Number($("#apiRateLimitSeconds").value),
+      }),
+    });
+    state.applicationSettings.apiRateLimitSeconds = result.apiRateLimitSeconds;
+    showToast(`API 请求间隔已改为 ${result.apiRateLimitSeconds} 秒`);
+  } catch {
+    showToast("API 访问频率格式不正确");
+  }
+});
+
+$("#adminCredentialsForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const newPassword = $("#newAdminPassword").value;
+  if (newPassword !== $("#confirmAdminPassword").value) {
+    showToast("两次输入的新密码不一致");
+    return;
+  }
+  try {
+    await apiRequest("/api/admin/settings/admin-credentials", {
+      method: "PATCH",
+      body: JSON.stringify({
+        username: $("#adminUsername").value,
+        currentPassword: $("#currentAdminPassword").value,
+        newPassword,
+      }),
+    });
+    window.alert("登录凭据已修改，请使用新账号密码重新登录。");
+    window.location.reload();
+  } catch (error) {
+    showToast(
+      error.message === "current_password_incorrect"
+        ? "当前密码不正确"
+        : "登录凭据修改失败",
+    );
+  }
+});
+
 document.querySelector(".tabs").addEventListener("click", (event) => {
   const tab = event.target.dataset.tab;
   if (!tab) return;

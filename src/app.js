@@ -19,6 +19,7 @@ export function createApp({ db, config, services = {} }) {
   const repository = createRepository(db, {
     onFirewallChange: (revision) => firewallEvents.emit("change", revision),
   });
+  repository.initializeApplicationSettings(config);
   const ipInfo = services.ipInfo || createIpInfoService({ config });
   const auth = createAuthMiddleware({ repository, config });
 

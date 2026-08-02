@@ -16,7 +16,7 @@ export function createAuthMiddleware({ repository, config }) {
       const rate = repository.consumeApiRequest(
         user.id,
         Date.now(),
-        config.apiRateLimitWindowMs ?? 60_000,
+        repository.getApiRateLimitWindowMs(),
       );
       res.set("RateLimit-Limit", "1");
       if (!rate.allowed) {

@@ -9,11 +9,11 @@ import {
 import {
   createSessionToken,
   createSurgeToken,
-  safeEqual,
+  normalizeIp,
+  normalizeNetwork,
   sha256,
 } from "../security.js";
 import { parsePortRanges } from "../ports.js";
-import { normalizeIp, normalizeNetwork } from "../security.js";
 
 const SESSION_COOKIE = "allowlist_session";
 
@@ -43,9 +43,10 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
       return res.status(429).json({ error: "too_many_attempts" });
     }
 
-    const authenticated =
-      safeEqual(req.body?.username, config.adminUsername) &&
-      safeEqual(req.body?.password, config.adminPassword);
+    const authenticated = repository.verifyAdminCredentials(
+      req.body?.username,
+      req.body?.password,
+    );
     if (!authenticated) {
       loginAttempts.set(req.ip, [...recent, now]);
       return res.status(401).json({ error: "invalid_credentials" });
@@ -95,6 +96,55 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
         message: error.message,
       });
     }
+  });
+
+  router.patch("/settings/api-rate", adminAuth, (req, res) => {
+    const seconds = Number(req.body?.seconds);
+    if (!Number.isInteger(seconds) || seconds < 1 || seconds > 65_535) {
+      return res.status(400).json({
+        error: "invalid_api_rate_limit",
+        message: "seconds must be an integer between 1 and 65535",
+      });
+    }
+    return res.json({
+      ok: true,
+      apiRateLimitSeconds: repository.setApiRateLimitSeconds(seconds),
+    });
+  });
+
+  router.patch("/settings/admin-credentials", adminAuth, (req, res) => {
+    const username = String(req.body?.username || "").trim();
+    const currentPassword = String(req.body?.currentPassword || "");
+    const newPassword = String(req.body?.newPassword || "");
+    if (
+      username.length < 3 ||
+      username.length > 64 ||
+      /[\x00-\x1f\x7f]/.test(username)
+    ) {
+      return res.status(400).json({ error: "invalid_admin_username" });
+    }
+    if (newPassword && (newPassword.length < 12 || newPassword.length > 256)) {
+      return res.status(400).json({ error: "invalid_admin_password" });
+    }
+    if (
+      !repository.verifyAdminCredentials(
+        repository.getAdminUsername(),
+        currentPassword,
+      )
+    ) {
+      return res.status(403).json({ error: "current_password_incorrect" });
+    }
+    repository.updateAdminCredentials({
+      username,
+      password: newPassword || null,
+    });
+    res.clearCookie(SESSION_COOKIE, {
+      httpOnly: true,
+      sameSite: "strict",
+      secure: config.cookieSecure,
+      path: "/",
+    });
+    return res.json({ ok: true, requiresLogin: true });
   });
 
   router.post("/users", adminAuth, (req, res, next) => {

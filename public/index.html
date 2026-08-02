@@ -76,7 +76,7 @@
         <nav class="tabs">
           <button class="active" data-tab="users">用户与网段</button
           ><button data-tab="audit">操作记录</button
-          ><button data-tab="settings">端口设置</button
+          ><button data-tab="settings">系统设置</button
           ><button data-tab="rules">全局规则</button
           ><button data-tab="api">API 使用</button>
         </nav>
@@ -168,6 +168,63 @@
             </p>
             <button class="primary" type="submit">保存端口设置</button>
           </form>
+          <form id="apiRateForm" class="settings-form">
+            <h3>API 访问频率</h3>
+            <label
+              >每个用户最短请求间隔（秒）
+              <input
+                id="apiRateLimitSeconds"
+                type="number"
+                min="1"
+                max="65535"
+                required
+              />
+            </label>
+            <p class="muted">
+              POST、GET 和 Surge 上报共用此限制，保存后立即生效。
+            </p>
+            <button class="primary" type="submit">保存 API 频率</button>
+          </form>
+          <form id="adminCredentialsForm" class="settings-form">
+            <h3>后台登录账号</h3>
+            <label
+              >管理员账号
+              <input id="adminUsername" minlength="3" maxlength="64" required />
+            </label>
+            <label
+              >当前密码
+              <input
+                id="currentAdminPassword"
+                type="password"
+                autocomplete="current-password"
+                required
+              />
+            </label>
+            <label
+              >新密码
+              <input
+                id="newAdminPassword"
+                type="password"
+                minlength="12"
+                maxlength="256"
+                autocomplete="new-password"
+                placeholder="留空表示只修改账号"
+              />
+            </label>
+            <label
+              >确认新密码
+              <input
+                id="confirmAdminPassword"
+                type="password"
+                maxlength="256"
+                autocomplete="new-password"
+              />
+            </label>
+            <p class="muted">
+              密码至少 12 位。保存后所有后台会话会退出，需要使用新凭据重新登录。
+            </p>
+            <button class="danger-outline" type="submit">修改登录凭据</button>
+          </form>
         </section>
 
         <section id="apiTab" class="panel tab-content hidden">
@@ -188,7 +245,8 @@
               <code>{"ip":"203.0.113.8"}</code>。
             </p>
             <p>
-              每个用户的客户端 API 每 60 秒最多请求一次，超限返回 HTTP 429。
+              每个用户的客户端 API 请求间隔可在“系统设置”页面修改，超限返回 HTTP
+              429。
             </p>
             <h3>查询当前 Key 的网段</h3>
             <pre><code>curl https://你的域名/api/v1/whitelist \

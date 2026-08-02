@@ -2,6 +2,7 @@ import {
   createHash,
   createHmac,
   randomBytes,
+  scryptSync,
   timingSafeEqual,
 } from "node:crypto";
 import { isIP } from "node:net";
@@ -18,6 +19,23 @@ export const safeEqual = (left, right) => {
 export const createApiKey = () =>
   `awl_${randomBytes(24).toString("base64url")}`;
 export const createSessionToken = () => randomBytes(32).toString("base64url");
+
+export function hashPassword(password) {
+  const salt = randomBytes(16).toString("base64url");
+  const hash = scryptSync(String(password), salt, 32).toString("base64url");
+  return `scrypt$${salt}$${hash}`;
+}
+
+export function verifyPassword(password, encoded) {
+  const match = String(encoded || "").match(
+    /^scrypt\$([A-Za-z0-9_-]{16,32})\$([A-Za-z0-9_-]{40,48})$/,
+  );
+  if (!match) return false;
+  const actual = scryptSync(String(password), match[1], 32).toString(
+    "base64url",
+  );
+  return safeEqual(actual, match[2]);
+}
 
 export function createSurgeToken(userId, secret) {
   const payload = Buffer.from(String(userId)).toString("base64url");

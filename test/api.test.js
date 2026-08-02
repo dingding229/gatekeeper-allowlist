@@ -140,6 +140,82 @@ test("admin can update normalized TCP and UDP port ranges", async (t) => {
   });
 });
 
+test("admin can change API frequency and login credentials", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const user = repository.createUser("settings-client");
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const adminHeaders = { Cookie: cookie, "Content-Type": "application/json" };
+
+  const rate = await fetch(`${baseUrl}/api/admin/settings/api-rate`, {
+    method: "PATCH",
+    headers: adminHeaders,
+    body: JSON.stringify({ seconds: 120 }),
+  });
+  assert.equal(rate.status, 200);
+  assert.equal((await rate.json()).apiRateLimitSeconds, 120);
+  const apiHeaders = { Authorization: `Bearer ${user.apiKey}` };
+  assert.equal(
+    (await fetch(`${baseUrl}/api/v1/whitelist`, { headers: apiHeaders }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await fetch(`${baseUrl}/api/v1/whitelist`, { headers: apiHeaders }))
+      .status,
+    429,
+  );
+
+  const credentials = await fetch(
+    `${baseUrl}/api/admin/settings/admin-credentials`,
+    {
+      method: "PATCH",
+      headers: adminHeaders,
+      body: JSON.stringify({
+        username: "new-admin",
+        currentPassword: "test-password",
+        newPassword: "new-test-password-123",
+      }),
+    },
+  );
+  assert.equal(credentials.status, 200);
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/api/admin/overview`, {
+        headers: { Cookie: cookie },
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "test-password" }),
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: "new-admin",
+          password: "new-test-password-123",
+        }),
+      })
+    ).status,
+    200,
+  );
+});
+
 test("admin can obtain a user-specific Surge module and token", async (t) => {
   const { baseUrl, repository } = await startTestApp(t);
   const user = repository.createUser("surge-phone");

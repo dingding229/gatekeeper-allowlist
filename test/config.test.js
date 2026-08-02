@@ -15,6 +15,10 @@ test("config validates port and firewall token", () => {
     () => loadConfig({ FIREWALL_SYNC_TOKEN: "short" }),
     /FIREWALL_SYNC_TOKEN must contain at least 24 characters/,
   );
+  assert.throws(
+    () => loadConfig({ API_RATE_LIMIT_SECONDS: "0" }),
+    /API_RATE_LIMIT_SECONDS must be an integer/,
+  );
 });
 
 test("config validates and normalizes the admin path", () => {

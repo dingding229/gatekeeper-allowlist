@@ -11,6 +11,8 @@ const actionNames = {
   "ip.cleared": "清空用户网段",
   "user.limit": "调整网段配额",
   "settings.updated": "更新端口设置",
+  "settings.api_rate": "更新 API 频率",
+  "admin.credentials": "修改后台凭据",
   "user.deleted": "删除用户",
   "network.blocked": "拉黑网段",
   "network.unblocked": "解除拉黑",
@@ -111,6 +113,10 @@ export function renderDashboard(state, query = "") {
   document.querySelector("#udpPorts").value = (
     state.settings?.udpPorts || []
   ).join(", ");
+  document.querySelector("#apiRateLimitSeconds").value =
+    state.applicationSettings?.apiRateLimitSeconds || 60;
+  document.querySelector("#adminUsername").value =
+    state.applicationSettings?.adminUsername || "admin";
 
   const normalizedQuery = query.trim().toLowerCase();
   const users = state.users.filter((user) => {

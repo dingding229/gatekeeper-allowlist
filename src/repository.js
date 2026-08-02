@@ -1,5 +1,12 @@
 import { API_RATE_LIMIT_WINDOW_MS, DEFAULT_IP_LIMIT } from "./constants.js";
-import { createApiKey, normalizeNetwork, sha256 } from "./security.js";
+import {
+  createApiKey,
+  hashPassword,
+  normalizeNetwork,
+  safeEqual,
+  sha256,
+  verifyPassword,
+} from "./security.js";
 
 const activeIpQuery = `
   SELECT w.id, w.ip, w.family, w.source, w.created_at, w.last_seen_at,
@@ -40,6 +47,85 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
   };
 
   return {
+    initializeApplicationSettings(config) {
+      const insert = db.prepare(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+      );
+      insert.run("admin_username", config.adminUsername);
+      insert.run("admin_password_hash", hashPassword(config.adminPassword));
+      const configuredWindow = Object.hasOwn(config, "apiRateLimitWindowMs")
+        ? Math.max(0, Math.ceil(config.apiRateLimitWindowMs / 1000))
+        : config.apiRateLimitSeconds || 60;
+      insert.run("api_rate_limit_seconds", String(configuredWindow));
+    },
+
+    verifyAdminCredentials(username, password) {
+      const rows = db
+        .prepare(
+          "SELECT key, value FROM settings WHERE key IN ('admin_username', 'admin_password_hash')",
+        )
+        .all();
+      const values = Object.fromEntries(
+        rows.map((row) => [row.key, row.value]),
+      );
+      const usernameMatches = safeEqual(
+        values.admin_username,
+        String(username || ""),
+      );
+      const passwordMatches = verifyPassword(
+        password,
+        values.admin_password_hash,
+      );
+      return usernameMatches && passwordMatches;
+    },
+
+    getAdminUsername() {
+      return db
+        .prepare("SELECT value FROM settings WHERE key = 'admin_username'")
+        .get()?.value;
+    },
+
+    updateAdminCredentials({ username, password }) {
+      const update = db.prepare(
+        `UPDATE settings SET value = ?,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE key = ?`,
+      );
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        update.run(username, "admin_username");
+        if (password) update.run(hashPassword(password), "admin_password_hash");
+        db.prepare("DELETE FROM sessions").run();
+        insertAudit.run(null, "admin.credentials", null, username);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
+    getApiRateLimitWindowMs() {
+      const seconds = Number(
+        db
+          .prepare(
+            "SELECT value FROM settings WHERE key = 'api_rate_limit_seconds'",
+          )
+          .get()?.value ?? 60,
+      );
+      return seconds * 1000;
+    },
+
+    setApiRateLimitSeconds(seconds) {
+      db.prepare(
+        `INSERT INTO settings (key, value, updated_at)
+         VALUES ('api_rate_limit_seconds', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+         updated_at = excluded.updated_at`,
+      ).run(String(seconds));
+      db.prepare("DELETE FROM api_rate_limits").run();
+      insertAudit.run(null, "settings.api_rate", null, `${seconds}s`);
+      return seconds;
+    },
+
     checkHealth() {
       return db.prepare("SELECT 1 AS ok").get().ok === 1;
     },
@@ -301,6 +387,10 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         blockedNetworks: this.listBlockedNetworks(),
         permanentWhitelist: this.listPermanentWhitelist(),
         settings: this.getFirewallSettings(),
+        applicationSettings: {
+          apiRateLimitSeconds: this.getApiRateLimitWindowMs() / 1000,
+          adminUsername: this.getAdminUsername(),
+        },
         stats: {
           users: users.length,
           activeUsers: users.filter((user) => user.enabled).length,

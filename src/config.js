@@ -83,6 +83,11 @@ export function loadConfig(env = process.env) {
       4_000,
       "IP_LOOKUP_TIMEOUT_MS",
     ),
+    apiRateLimitSeconds: integerValue(
+      env.API_RATE_LIMIT_SECONDS,
+      60,
+      "API_RATE_LIMIT_SECONDS",
+    ),
     trustProxy: booleanValue(env.TRUST_PROXY),
     cookieSecure: booleanValue(env.COOKIE_SECURE),
     production: env.NODE_ENV === "production",

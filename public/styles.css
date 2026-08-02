@@ -466,6 +466,12 @@ header {
 .settings-form .primary {
   margin-top: 8px;
 }
+#settingsTab .settings-form + .settings-form {
+  border-top: 1px solid #edf0ee;
+}
+#settingsTab .settings-form .danger-outline {
+  margin-top: 8px;
+}
 dialog {
   padding: 0;
   border: 0;

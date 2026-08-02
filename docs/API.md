@@ -66,7 +66,7 @@ Authorization: Bearer awl_xxx
 
 ## 访问频率
 
-同一用户的全部客户端接口共用限额：每 60 秒最多访问 1 次。API Key 与该用户的 Surge 专属令牌计入同一个限额。超限时返回：
+同一用户的全部客户端接口共用请求间隔，默认 60 秒，管理员可在后台“系统设置”立即修改。API Key 与该用户的 Surge 专属令牌计入同一个限额。超限时返回：
 
 ```http
 HTTP/1.1 429 Too Many Requests
@@ -100,7 +100,7 @@ GET /health
 | 401 | `missing_api_key` | 未提供 Key |
 | 401 | `invalid_api_key` | Key 错误、已轮换或用户已停用 |
 | 403 | `network_blacklisted` | 该 IP 所属网段已被管理员拉黑 |
-| 429 | `rate_limit_exceeded` | 该用户在最近 60 秒内已访问客户端 API |
+| 429 | `rate_limit_exceeded` | 该用户在管理员设置的最短间隔内已访问客户端 API |
 | 500 | `internal_error` | 服务端异常 |
 
 管理员接口供自带 Web 后台使用，通过 HttpOnly 会话 Cookie 鉴权，不作为公开集成接口。防火墙快照和版本通知接口只允许本机访问，Caddy 对公网统一返回 404。用户新增、淘汰、移除、清空、启停和端口设置变更后，宿主机即时同步服务会刷新 nftables；每分钟定时器作为失败兜底。
