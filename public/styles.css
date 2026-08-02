@@ -447,6 +447,22 @@ header {
 .audit-row small {
   color: var(--muted);
 }
+.device-row {
+  grid-template-columns: minmax(130px, 170px) minmax(0, 1fr) 110px max-content;
+  align-items: center;
+}
+.device-meta {
+  min-width: 0;
+  line-height: 1.6;
+}
+.device-id {
+  color: inherit;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.device-row .danger-link {
+  white-space: nowrap;
+}
 .docs {
   padding: 24px;
   max-width: 820px;

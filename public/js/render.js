@@ -60,9 +60,9 @@ function renderDevices(devices, userId) {
   if (!devices.length) return '<div class="empty">尚未识别到设备</div>';
   return `<div class="audit-list">${devices
     .map(
-      (device) => `<div class="audit-row">
+      (device) => `<div class="audit-row device-row">
         <strong>${escapeHtml(device.name)}</strong>
-        <small>${escapeHtml(device.source)} · ${escapeHtml(device.last_ip || "IP 未知")} · ID ${escapeHtml(device.device_key.slice(0, 16))}…</small>
+        <small class="device-meta">${escapeHtml(device.source)} · ${escapeHtml(device.last_ip || "IP 未知")} · ID <code class="device-id">${escapeHtml(device.device_key)}</code></small>
         <time>${formatTime(device.last_seen_at)}</time>
         <button class="danger-link" data-remove-device="${device.id}" data-device-user="${userId}">移除</button>
       </div>`,
