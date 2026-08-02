@@ -1,15 +1,18 @@
 # Gatekeeper
 
-面向 Debian 12 的多用户服务器网段白名单。每个 API Key 最多保存 3 个 IPv4 `/24` 网段；第 4 个不同网段会自动淘汰最早加入的网段。IPv6 按 `/64` 保存。
+面向 Debian 12 的多用户服务器网段白名单。每个用户可独立设置允许的网段数量；超出配额时自动淘汰最早加入的网段。IPv4 按 `/24`、IPv6 按 `/64` 保存。
 
 主要功能：
 
-- 多用户 API Key，每个 Key 独立维护 3 个网段，按 FIFO 自动轮换。
+- 多用户 API Key，每个用户默认 3 个网段，可在后台调整为 1–100 个，按 FIFO 自动轮换。
 - 后台查看用户、网段和审计记录，设置受保护的 TCP/UDP 端口或端口范围。
+- 后台显示上报 IP、网段、国家/地区/城市、运营商、服务器公网 IP 和用户历史 IP。
+- 支持清空单个用户当前网段而保留历史记录。
+- 客户端 API 按用户限制为每 60 秒最多 1 次访问。
 - 后台仅在安装时生成的自定义路径开放，直接访问域名根路径返回 404。
 - 后台为每个用户生成独立的 Surge 一键安装地址。
 - Surge 在网络切换时和每 3 分钟自动上报当前出口 IP，并提供手动刷新面板。
-- Caddy 自动 HTTPS、SQLite 持久化、nftables 定时同步。
+- Caddy 自动 HTTPS、SQLite 持久化、nftables 变更后即时同步，并保留每分钟兜底同步。
 
 ## 一键部署
 
@@ -45,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 3. 下载项目并部署到 `/opt/gatekeeper`。
 4. 启动 Gatekeeper 和 Caddy，自动申请 HTTPS 证书。
 5. 创建初始用户，把当前 SSH 来源 IP 所属 `/24` 加入白名单。
-6. 经确认后配置 nftables，并每分钟同步有效网段和保护端口。
+6. 经确认后配置 nftables，即时同步有效网段和保护端口，并启用每分钟兜底任务。
 
 如果 Docker Hub 因 DNS、IPv6 或地区网络限制无法访问，脚本会在 SSH 中询问 Docker Hub 镜像加速地址，并安全合并现有 `/etc/docker/daemon.json`。默认建议值来自 [DaoCloud public-image-mirror](https://github.com/DaoCloud/public-image-mirror)。第三方镜像服务不由本项目运营，使用前请自行评估。
 
@@ -61,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/update.sh | sudo bash
 ```
 
-更新脚本会保留数据库、API Key、`.env` 和 HTTPS 证书，并默认保留已有 TCP/UDP 保护范围。端口支持逗号及范围，例如 `22,443,8000-9000`；输入 `none` 可清空。如果旧安装没有启用 nftables，脚本会主动询问是否启用，并在加载规则前确认当前 SSH 网段已经在白名单中。脚本使用临时文件生成并检查规则，检查通过后才会原子替换正式配置，最后强制验证 systemd、同步任务和 nftables 规则表。
+更新脚本会保留数据库、API Key、历史 IP、`.env` 和 HTTPS 证书，并自动迁移数据库。默认保留已有 TCP/UDP 保护范围。端口支持逗号及范围，例如 `22,443,8000-9000`；输入 `none` 可清空。如果旧安装没有启用 nftables，脚本会主动询问是否启用，并在加载规则前确认当前 SSH 网段已经在白名单中。脚本使用临时文件生成并检查规则，检查通过后才会原子替换正式配置，最后强制验证 systemd、即时同步服务、兜底定时器和 nftables 规则表。
 
 ## 使用 API
 
@@ -82,6 +85,8 @@ curl https://你的域名/api/v1/whitelist \
 ```
 
 更多字段见 [API 参考](docs/API.md)。
+
+同一用户的 `POST` 和 `GET` 客户端 API 共用每 60 秒 1 次的限额。超限返回 `429` 和 `Retry-After`；不同用户互不影响。
 
 ## Surge 自动添加
 
@@ -135,6 +140,7 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 
 # 检查防火墙同步
 systemctl status gatekeeper-sync.timer
+journalctl -u gatekeeper-sync-listener.service -n 50 --no-pager
 journalctl -u gatekeeper-sync.service -n 50 --no-pager
 
 # 一键诊断防火墙、同步接口和当前端口范围
@@ -150,8 +156,10 @@ sudo /opt/gatekeeper/scripts/firewall-doctor.sh
 ## 安全说明
 
 - Gatekeeper 应只通过 Caddy 的 HTTPS 入口访问。
+- IP 地区功能默认通过 `https://ipwho.is` 查询公网 IP 的大致位置和运营商；这会把上报 IP 发送给该服务。结果在本地缓存 7 天以减少外部请求。可在 `.env` 设置 `IP_GEOLOCATION_ENABLED=0` 后重启以关闭，查询失败不会影响加白。其免费接口当前限制为每个来源 IP 每日 1,000 次，生产规模较大时请配置自有兼容服务或关闭查询。
+- 服务器公网 IP 默认通过 ipify 的 IPv4/IPv6 HTTPS 接口查询并缓存 10 分钟；查询失败时后台显示“暂未获取”。
 - 内部防火墙快照接口不会由 Caddy 对公网开放。
-- Docker 容器不具备修改宿主机防火墙的权限；nftables 同步由宿主机 systemd 任务完成。
+- Docker 容器不具备修改宿主机防火墙的权限；应用通过本机内部长轮询通知宿主机 systemd 服务即时同步，定时器每分钟再次校准。
 - 后台自定义路径用于减少无意义扫描，管理员密码和会话认证仍是主要安全边界；API 路径保持固定以支持客户端自动上报。
 - nftables 设置同时保护宿主机 `input` 链和 Docker 发布端口经过的 `forward` 链。不要把 80/443 加入保护范围，否则未加白设备将无法调用 API 或打开后台。
 - Docker 官方文档提醒容器发布端口可能绕过部分主机防火墙规则；容器额外发布的端口应同时通过云安全组或 Docker 网络规则限制。

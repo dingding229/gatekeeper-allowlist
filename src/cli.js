@@ -2,7 +2,7 @@ import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 import { parsePortRanges } from "./ports.js";
 import { createRepository } from "./repository.js";
-import { normalizeNetwork } from "./security.js";
+import { normalizeIp, normalizeNetwork } from "./security.js";
 
 const [, , command, ...args] = process.argv;
 const config = loadConfig();
@@ -20,6 +20,7 @@ try {
     const user = repository.createUser(name.trim());
     repository.addIp(
       user.id,
+      normalizeIp(rawIp),
       normalized.network,
       normalized.family,
       "installer",

@@ -47,7 +47,9 @@
           <div>
             <p class="eyebrow">OVERVIEW</p>
             <h1>访问白名单</h1>
-            <p class="muted">每个 API Key 保留最近添加的 3 个网段</p>
+            <p class="muted">
+              每个用户独立设置网段配额，超出后自动淘汰最早网段
+            </p>
           </div>
           <button id="newUserBtn" class="primary">＋ 创建用户</button>
         </div>
@@ -65,9 +67,9 @@
             <span>生效网段</span><strong id="statIps">—</strong
             ><small>跨全部用户</small>
           </article>
-          <article class="capacity">
-            <span>单用户容量</span><strong>3 <em>网段</em></strong
-            ><small>先进先出自动轮换</small>
+          <article class="capacity server-card">
+            <span>当前服务器公网 IP</span><strong id="serverIps">—</strong
+            ><small>由服务器主动查询，最多缓存 10 分钟</small>
           </article>
         </div>
 
@@ -123,7 +125,8 @@
               />
             </label>
             <p class="muted">
-              多个端口使用逗号分隔。保存后最多约 1 分钟同步到 nftables。
+              多个端口使用逗号分隔。保存后由即时同步服务写入
+              nftables，每分钟定时器作为兜底。
             </p>
             <button class="primary" type="submit">保存端口设置</button>
           </form>
@@ -145,6 +148,9 @@
             <p>
               不传 <code>ip</code> 时自动使用请求的来源地址。指定地址时传入
               <code>{"ip":"203.0.113.8"}</code>。
+            </p>
+            <p>
+              每个用户的客户端 API 每 60 秒最多请求一次，超限返回 HTTP 429。
             </p>
             <h3>查询当前 Key 的网段</h3>
             <pre><code>curl https://你的域名/api/v1/whitelist \
@@ -202,6 +208,14 @@
         <a id="openSurgeModule" class="primary full" href="#"
           >在 Surge 中安装</a
         >
+      </div>
+    </dialog>
+    <dialog id="historyDialog" class="wide-dialog">
+      <div class="key-result">
+        <button class="dialog-x" data-close aria-label="关闭">×</button>
+        <h2 id="historyTitle">历史 IP</h2>
+        <p class="muted">显示最近 100 次上报；清空当前网段不会删除历史记录。</p>
+        <div id="historyContent"></div>
       </div>
     </dialog>
     <div id="toast" class="toast"></div>

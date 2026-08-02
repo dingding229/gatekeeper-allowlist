@@ -217,6 +217,14 @@ header {
     600 29px/1.2 Georgia,
     serif;
 }
+.stats .server-card strong {
+  font:
+    600 15px/1.35 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  overflow-wrap: anywhere;
+}
 .stats small {
   color: #8a938e;
 }
@@ -375,8 +383,29 @@ header {
 }
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
+}
+.limit-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 6px 0 0;
+  font-size: 12px;
+}
+.limit-control input {
+  width: 70px;
+  margin: 0;
+  padding: 8px;
+}
+.danger-outline {
+  padding: 9px 13px;
+  border: 1px solid #e8caca;
+  border-radius: 9px;
+  background: #fff8f8;
+  color: var(--red);
 }
 .row-actions button {
   font-size: 12px;
@@ -443,6 +472,30 @@ dialog {
   border-radius: 18px;
   box-shadow: var(--shadow);
   width: min(470px, calc(100% - 30px));
+}
+.wide-dialog {
+  width: min(900px, calc(100% - 30px));
+}
+.history-scroll {
+  max-height: 60vh;
+  margin-top: 20px;
+  overflow: auto;
+}
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.history-table th,
+.history-table td {
+  padding: 11px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.history-table th,
+.history-table small {
+  color: var(--muted);
+  font-size: 12px;
 }
 dialog::backdrop {
   background: rgba(10, 22, 16, 0.45);

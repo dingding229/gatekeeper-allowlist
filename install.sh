@@ -99,7 +99,7 @@ printf '\nGatekeeper Debian 12 一键部署\n\n'
 
 info "安装基础依赖"
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg jq nftables openssl python3 tar
+DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg jq nftables openssl python3 tar util-linux
 
 while true; do
   DOMAIN="$(prompt '访问域名（需提前解析到本机）')"
@@ -206,7 +206,10 @@ else
     | tar -xz -C "$TEMP_DIR" --strip-components=1
   SOURCE_DIR="$TEMP_DIR"
 fi
-[[ -x "$SOURCE_DIR/scripts/render-nftables.sh" && -x "$SOURCE_DIR/scripts/install-nftables-config.sh" ]] \
+[[ -x "$SOURCE_DIR/scripts/render-nftables.sh" \
+  && -x "$SOURCE_DIR/scripts/install-nftables-config.sh" \
+  && -x "$SOURCE_DIR/scripts/watch-firewall.sh" \
+  && -f "$SOURCE_DIR/deploy/systemd/gatekeeper-sync-listener.service" ]] \
   || fail "源码缺少防火墙安装脚本"
 
 info "安装到 $INSTALL_DIR"
@@ -271,14 +274,20 @@ EOF
     deploy/systemd/gatekeeper-sync.service \
     > /etc/systemd/system/gatekeeper-sync.service
   chmod 0644 /etc/systemd/system/gatekeeper-sync.service
+  sed "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
+    deploy/systemd/gatekeeper-sync-listener.service \
+    > /etc/systemd/system/gatekeeper-sync-listener.service
+  chmod 0644 /etc/systemd/system/gatekeeper-sync-listener.service
   install -m 0644 deploy/systemd/gatekeeper-sync.timer /etc/systemd/system/
   systemctl daemon-reload
   systemctl enable gatekeeper-firewall.service
   systemctl restart gatekeeper-firewall.service
   systemctl start gatekeeper-sync.service
+  systemctl enable --now gatekeeper-sync-listener.service
   systemctl enable --now gatekeeper-sync.timer
   systemctl is-active --quiet gatekeeper-firewall.service || fail "防火墙服务未运行"
   systemctl is-active --quiet gatekeeper-sync.timer || fail "同步定时器未运行"
+  systemctl is-active --quiet gatekeeper-sync-listener.service || fail "即时同步服务未运行"
   nft list table inet gatekeeper >/dev/null || fail "nftables 规则表未加载"
   scripts/firewall-doctor.sh || fail "防火墙自检失败"
 fi

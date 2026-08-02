@@ -1,5 +1,5 @@
 [Unit]
-Description=Synchronize Gatekeeper IPs every minute
+Description=Fallback synchronization of Gatekeeper IPs every minute
 
 [Timer]
 OnBootSec=30s

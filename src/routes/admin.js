@@ -2,6 +2,8 @@ import { Router } from "express";
 import {
   LOGIN_ATTEMPT_LIMIT,
   LOGIN_WINDOW_MS,
+  MAX_IP_LIMIT,
+  MIN_IP_LIMIT,
   SESSION_TTL_MS,
 } from "../constants.js";
 import {
@@ -19,7 +21,7 @@ const validId = (value) => {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 };
 
-export function createAdminRouter({ repository, adminAuth, config }) {
+export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
   const router = Router();
   const loginAttempts = new Map();
 
@@ -72,8 +74,10 @@ export function createAdminRouter({ repository, adminAuth, config }) {
     res.json({ ok: true });
   });
 
-  router.get("/overview", adminAuth, (_req, res) => {
-    res.json(repository.getOverview());
+  router.get("/overview", adminAuth, async (_req, res) => {
+    const overview = repository.getOverview();
+    overview.server = await ipInfo.getServerInfo();
+    res.json(overview);
   });
 
   router.patch("/settings/firewall", adminAuth, (req, res) => {
@@ -117,13 +121,65 @@ export function createAdminRouter({ repository, adminAuth, config }) {
   router.patch("/users/:id", adminAuth, (req, res) => {
     const userId = validId(req.params.id);
     if (!userId) return res.status(400).json({ error: "invalid_user_id" });
-    if (typeof req.body?.enabled !== "boolean") {
+    const hasEnabled = Object.hasOwn(req.body || {}, "enabled");
+    const hasIpLimit = Object.hasOwn(req.body || {}, "ipLimit");
+    if (!hasEnabled && !hasIpLimit) {
+      return res.status(400).json({ error: "missing_user_update" });
+    }
+    if (hasEnabled && typeof req.body.enabled !== "boolean") {
       return res.status(400).json({ error: "invalid_enabled_value" });
     }
-    if (!repository.setUserEnabled(userId, req.body.enabled)) {
+    if (
+      hasIpLimit &&
+      (!Number.isInteger(req.body.ipLimit) ||
+        req.body.ipLimit < MIN_IP_LIMIT ||
+        req.body.ipLimit > MAX_IP_LIMIT)
+    ) {
+      return res.status(400).json({
+        error: "invalid_ip_limit",
+        min: MIN_IP_LIMIT,
+        max: MAX_IP_LIMIT,
+      });
+    }
+    const existing = repository.findUserById(userId);
+    if (!existing) {
       return res.status(404).json({ error: "user_not_found" });
     }
-    return res.json({ ok: true });
+    if (hasEnabled) repository.setUserEnabled(userId, req.body.enabled);
+    const limitResult = hasIpLimit
+      ? repository.setUserLimit(userId, req.body.ipLimit)
+      : null;
+    return res.json({ ok: true, evicted: limitResult?.evicted || [] });
+  });
+
+  router.get("/users/:id/history", adminAuth, (req, res) => {
+    const userId = validId(req.params.id);
+    if (!userId) return res.status(400).json({ error: "invalid_user_id" });
+    if (!repository.findUserById(userId)) {
+      return res.status(404).json({ error: "user_not_found" });
+    }
+    const limit = Math.min(
+      200,
+      Math.max(1, Number.parseInt(req.query.limit, 10) || 100),
+    );
+    const offset = Math.min(
+      1_000_000,
+      Math.max(0, Number.parseInt(req.query.offset, 10) || 0),
+    );
+    return res.json({
+      ok: true,
+      history: repository.listUserHistory(userId, limit, offset),
+    });
+  });
+
+  router.delete("/users/:id/ips", adminAuth, (req, res) => {
+    const userId = validId(req.params.id);
+    if (!userId) return res.status(400).json({ error: "invalid_user_id" });
+    const removed = repository.clearUserIps(userId);
+    if (removed === null) {
+      return res.status(404).json({ error: "user_not_found" });
+    }
+    return res.json({ ok: true, removed });
   });
 
   router.post("/users/:id/rotate-key", adminAuth, (req, res) => {

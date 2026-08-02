@@ -15,6 +15,10 @@ esac
 command -v curl >/dev/null 2>&1 || { echo "curl is required" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
 command -v nft >/dev/null 2>&1 || { echo "nft is required" >&2; exit 1; }
+command -v flock >/dev/null 2>&1 || { echo "flock is required" >&2; exit 1; }
+
+exec 9>/run/gatekeeper-sync.lock
+flock -w 15 9 || { echo "another firewall sync is still running" >&2; exit 1; }
 
 snapshot="$(curl --fail --silent --show-error --max-time 10 \
   -H "Authorization: Bearer ${FIREWALL_SYNC_TOKEN}" \

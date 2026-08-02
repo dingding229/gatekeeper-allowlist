@@ -1,15 +1,13 @@
 import { Router } from "express";
-import { IP_LIMIT } from "../constants.js";
-import { normalizeNetwork } from "../security.js";
+import { normalizeIp, normalizeNetwork } from "../security.js";
 
-export function createAllowlistRouter({ repository, apiAuth }) {
+export function createAllowlistRouter({ repository, apiAuth, ipInfo }) {
   const router = Router();
 
   router.post("/whitelist", apiAuth, (req, res, next) => {
     try {
-      const normalized = normalizeNetwork(
-        req.body?.ip || req.ip || req.socket.remoteAddress,
-      );
+      const rawIp = req.body?.ip || req.ip || req.socket.remoteAddress;
+      const normalized = normalizeNetwork(rawIp);
       if (!normalized) {
         return res.status(400).json({
           error: "invalid_ip",
@@ -21,12 +19,25 @@ export function createAllowlistRouter({ repository, apiAuth }) {
         String(req.body?.source || "api")
           .trim()
           .slice(0, 32) || "api";
+      const observedIp = normalizeIp(String(rawIp).split("/")[0]);
       const result = repository.addIp(
         req.user.id,
+        observedIp,
         normalized.network,
         normalized.family,
         source,
       );
+      const cachedLocation = repository.getCachedIpLocation(observedIp);
+      void Promise.resolve(cachedLocation || ipInfo.lookup(observedIp))
+        .then((location) => {
+          if (location) {
+            if (!cachedLocation) {
+              repository.saveIpLocation(observedIp, location);
+            }
+            repository.updateHistoryLocation(result.historyId, location);
+          }
+        })
+        .catch(() => {});
       const ips = repository.listUserIps(req.user.id);
       return res.status(result.status === "added" ? 201 : 200).json({
         ok: true,
@@ -34,7 +45,7 @@ export function createAllowlistRouter({ repository, apiAuth }) {
         ip: normalized.network,
         evicted: result.evicted,
         slots: ips.length,
-        limit: IP_LIMIT,
+        limit: result.limit,
         ips,
       });
     } catch (error) {
@@ -44,7 +55,12 @@ export function createAllowlistRouter({ repository, apiAuth }) {
 
   router.get("/whitelist", apiAuth, (req, res) => {
     const ips = repository.listUserIps(req.user.id);
-    res.json({ user: req.user.name, limit: IP_LIMIT, slots: ips.length, ips });
+    res.json({
+      user: req.user.name,
+      limit: req.user.ip_limit,
+      slots: ips.length,
+      ips,
+    });
   });
 
   return router;

@@ -47,6 +47,17 @@ const publicBaseUrlValue = (env) => {
   return url.origin;
 };
 
+const httpsUrlValue = (value, name) => {
+  let url;
+  try {
+    url = new URL(String(value).replace("{ip}", "1.1.1.1"));
+  } catch {
+    throw new Error(`${name} must be a valid URL`);
+  }
+  if (url.protocol !== "https:") throw new Error(`${name} must use HTTPS`);
+  return String(value);
+};
+
 export function loadConfig(env = process.env) {
   const config = {
     host: env.HOST || "127.0.0.1",
@@ -57,6 +68,27 @@ export function loadConfig(env = process.env) {
     adminPassword: env.ADMIN_PASSWORD || DEFAULT_PASSWORD,
     firewallSyncToken: env.FIREWALL_SYNC_TOKEN || "",
     publicBaseUrl: publicBaseUrlValue(env),
+    ipGeolocationEnabled: env.IP_GEOLOCATION_ENABLED !== "0",
+    ipGeolocationUrl: httpsUrlValue(
+      env.IP_GEOLOCATION_URL ||
+        "https://ipwho.is/{ip}?fields=success,country,region,city,connection.isp&lang=zh-CN",
+      "IP_GEOLOCATION_URL",
+    ),
+    serverIpLookupUrls: [
+      httpsUrlValue(
+        env.SERVER_IPV4_LOOKUP_URL || "https://api.ipify.org?format=json",
+        "SERVER_IPV4_LOOKUP_URL",
+      ),
+      httpsUrlValue(
+        env.SERVER_IPV6_LOOKUP_URL || "https://api6.ipify.org?format=json",
+        "SERVER_IPV6_LOOKUP_URL",
+      ),
+    ],
+    ipLookupTimeoutMs: integerValue(
+      env.IP_LOOKUP_TIMEOUT_MS,
+      4_000,
+      "IP_LOOKUP_TIMEOUT_MS",
+    ),
     trustProxy: booleanValue(env.TRUST_PROXY),
     cookieSecure: booleanValue(env.COOKIE_SECURE),
     production: env.NODE_ENV === "production",
@@ -72,6 +104,9 @@ export function loadConfig(env = process.env) {
   }
   if (config.firewallSyncToken && config.firewallSyncToken.length < 24) {
     throw new Error("FIREWALL_SYNC_TOKEN must contain at least 24 characters");
+  }
+  if (config.ipLookupTimeoutMs < 500 || config.ipLookupTimeoutMs > 15_000) {
+    throw new Error("IP_LOOKUP_TIMEOUT_MS must be between 500 and 15000");
   }
   if (config.production && !config.publicBaseUrl) {
     throw new Error("DOMAIN or PUBLIC_BASE_URL is required in production");

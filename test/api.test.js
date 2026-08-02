@@ -12,12 +12,26 @@ const config = {
   cookieSecure: false,
   adminPath: "/manage-test",
   publicBaseUrl: "https://allowlist.example.test",
+  apiRateLimitWindowMs: 0,
 };
 
-async function startTestApp(t) {
+const ipInfo = {
+  lookup: async () => null,
+  getServerInfo: async () => ({
+    ips: ["198.51.100.10"],
+    available: true,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  }),
+};
+
+async function startTestApp(t, configOverrides = {}) {
   const db = openDatabase(":memory:");
   const repository = createRepository(db);
-  const server = createApp({ db, config }).listen(0, "127.0.0.1");
+  const server = createApp({
+    db,
+    config: { ...config, ...configOverrides },
+    services: { ipInfo },
+  }).listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   t.after(() => {
     server.close();
@@ -183,6 +197,95 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
     ).status,
     401,
   );
+});
+
+test("client API is limited to one request per user per minute", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t, {
+    apiRateLimitWindowMs: 60_000,
+  });
+  const user = repository.createUser("rate-limited-client");
+  const headers = { Authorization: `Bearer ${user.apiKey}` };
+
+  assert.equal(
+    (await fetch(`${baseUrl}/api/v1/whitelist`, { method: "POST", headers }))
+      .status,
+    201,
+  );
+  const blocked = await fetch(`${baseUrl}/api/v1/whitelist`, { headers });
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get("ratelimit-limit"), "1");
+  assert.match(blocked.headers.get("retry-after"), /^\d+$/);
+  assert.equal((await blocked.json()).error, "rate_limit_exceeded");
+});
+
+test("admin can set user quota, inspect history, and clear active networks", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const user = repository.createUser("quota-client");
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const adminHeaders = { Cookie: cookie, "Content-Type": "application/json" };
+
+  const quota = await fetch(`${baseUrl}/api/admin/users/${user.id}`, {
+    method: "PATCH",
+    headers: adminHeaders,
+    body: JSON.stringify({ ipLimit: 2 }),
+  });
+  assert.equal(quota.status, 200);
+
+  for (const ip of ["8.8.8.8", "1.1.1.1", "9.9.9.9"]) {
+    const response = await fetch(`${baseUrl}/api/v1/whitelist`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${user.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ip }),
+    });
+    assert.equal(response.status, 201);
+  }
+  assert.equal(repository.listUserIps(user.id).length, 2);
+
+  const history = await (
+    await fetch(`${baseUrl}/api/admin/users/${user.id}/history`, {
+      headers: { Cookie: cookie },
+    })
+  ).json();
+  assert.equal(history.history.length, 3);
+  assert.equal(history.history[0].observed_ip, "9.9.9.9");
+
+  const cleared = await fetch(`${baseUrl}/api/admin/users/${user.id}/ips`, {
+    method: "DELETE",
+    headers: { Cookie: cookie },
+  });
+  assert.equal(cleared.status, 200);
+  assert.equal((await cleared.json()).removed, 2);
+  assert.equal(repository.listUserIps(user.id).length, 0);
+  assert.equal(repository.listUserHistory(user.id).length, 3);
+});
+
+test("firewall revision long poll wakes immediately after an API change", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const user = repository.createUser("firewall-event-client");
+  const revisionRequest = fetch(
+    `${baseUrl}/api/internal/firewall-revision?since=0`,
+    {
+      headers: {
+        Authorization: `Bearer ${config.firewallSyncToken}`,
+      },
+    },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await fetch(`${baseUrl}/api/v1/whitelist`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${user.apiKey}` },
+  });
+  const revision = await revisionRequest;
+  assert.equal(revision.status, 200);
+  assert.equal((await revision.json()).revision, 1);
 });
 
 test("malformed cookies and unknown API routes return JSON errors", async (t) => {

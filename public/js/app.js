@@ -1,5 +1,5 @@
 import { apiRequest } from "./api.js";
-import { renderDashboard } from "./render.js";
+import { renderDashboard, renderHistory } from "./render.js";
 
 const $ = (selector) => document.querySelector(selector);
 let state = { users: [], ips: [], audit: [], settings: {}, stats: {} };
@@ -117,7 +117,7 @@ $("#firewallForm").addEventListener("submit", async (event) => {
     });
     state.settings = result.settings;
     renderDashboard(state, $("#searchInput").value);
-    showToast("端口设置已保存，等待防火墙同步");
+    showToast("端口设置已保存，正在同步防火墙");
   } catch (error) {
     showToast(
       error.message === "invalid_port_ranges"
@@ -171,6 +171,54 @@ $("#userList").addEventListener("click", async (event) => {
       });
       showToast("用户状态已更新");
       await loadDashboard();
+      return;
+    }
+
+    const limitButton = event.target.closest("[data-save-limit]");
+    if (limitButton) {
+      const input = document.querySelector(
+        `[data-limit-input="${limitButton.dataset.saveLimit}"]`,
+      );
+      const ipLimit = Number(input.value);
+      const result = await apiRequest(
+        `/api/admin/users/${limitButton.dataset.saveLimit}`,
+        { method: "PATCH", body: JSON.stringify({ ipLimit }) },
+      );
+      showToast(
+        result.evicted.length
+          ? `配额已保存，并淘汰 ${result.evicted.length} 个旧网段`
+          : "用户网段配额已保存",
+      );
+      await loadDashboard();
+      return;
+    }
+
+    const clearButton = event.target.closest("[data-clear-ips]");
+    if (
+      clearButton &&
+      window.confirm("确定清空该用户当前放行的全部网段？历史记录会保留。")
+    ) {
+      const result = await apiRequest(
+        `/api/admin/users/${clearButton.dataset.clearIps}/ips`,
+        { method: "DELETE" },
+      );
+      showToast(`已清空 ${result.removed} 个网段`);
+      await loadDashboard();
+      return;
+    }
+
+    const historyButton = event.target.closest("[data-history]");
+    if (historyButton) {
+      const user = state.users.find(
+        (item) => item.id === Number(historyButton.dataset.history),
+      );
+      $("#historyTitle").textContent = `${user?.name || "用户"} · 历史 IP`;
+      $("#historyContent").innerHTML = '<div class="empty">正在加载…</div>';
+      $("#historyDialog").showModal();
+      const result = await apiRequest(
+        `/api/admin/users/${historyButton.dataset.history}/history?limit=100`,
+      );
+      $("#historyContent").innerHTML = renderHistory(result.history);
       return;
     }
 

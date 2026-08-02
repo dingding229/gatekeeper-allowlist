@@ -8,8 +8,14 @@ const actionNames = {
   "ip.seen": "网段再次上报",
   "ip.evicted": "自动淘汰",
   "ip.removed": "手动移除",
+  "ip.cleared": "清空用户网段",
+  "user.limit": "调整网段配额",
   "settings.updated": "更新端口设置",
 };
+
+const locationText = (ip) =>
+  [ip.country, ip.region, ip.city].filter(Boolean).join(" · ") ||
+  "地区查询中或不可用";
 
 function renderIpRows(ips) {
   if (!ips.length)
@@ -22,7 +28,8 @@ function renderIpRows(ips) {
       <td><span class="slot">${index + 1}</span></td>
       <td>
         <code>${escapeHtml(ip.ip)}</code><br>
-        <small>IPv${ip.family} · ${escapeHtml(ip.source)}</small>
+        <small>IPv${ip.family} · ${escapeHtml(ip.source)} · 上报 IP ${escapeHtml(ip.observed_ip || "—")}</small><br>
+        <small>${escapeHtml(locationText(ip))}${ip.isp ? ` · ${escapeHtml(ip.isp)}` : ""}</small>
       </td>
       <td>
         <small>
@@ -51,7 +58,7 @@ function renderUser(user, allIps) {
           <span class="avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</span>
           <div>
             <strong>${escapeHtml(user.name)}</strong>
-            <small>${user.ip_count}/3 个网段槽位</small>
+            <small>${user.ip_count}/${user.ip_limit} 个网段槽位</small>
           </div>
         </div>
         <div class="key-prefix">Key&nbsp; <code>${escapeHtml(user.key_prefix)}••••••</code></div>
@@ -64,11 +71,17 @@ function renderUser(user, allIps) {
       <div class="ip-details hidden">
         <table class="ip-table"><tbody>${renderIpRows(ips)}</tbody></table>
         <div class="row-actions">
+          <label class="limit-control">网段配额
+            <input type="number" min="1" max="100" value="${user.ip_limit}" data-limit-input="${user.id}">
+            <button class="ghost" data-save-limit="${user.id}">保存配额</button>
+          </label>
           <button class="ghost" data-toggle-user="${user.id}" data-enabled="${user.enabled ? 0 : 1}">
             ${user.enabled ? "停用用户" : "重新启用"}
           </button>
           <button class="ghost" data-rotate="${user.id}">轮换 API Key</button>
           <button class="ghost" data-surge="${user.id}">Surge 安装地址</button>
+          <button class="ghost" data-history="${user.id}">历史 IP</button>
+          <button class="danger-outline" data-clear-ips="${user.id}">清空网段</button>
         </div>
       </div>
     </article>
@@ -79,6 +92,9 @@ export function renderDashboard(state, query = "") {
   document.querySelector("#statUsers").textContent = state.stats.users;
   document.querySelector("#statActive").textContent = state.stats.activeUsers;
   document.querySelector("#statIps").textContent = state.stats.ips;
+  document.querySelector("#serverIps").textContent = state.server?.ips?.length
+    ? state.server.ips.join(" / ")
+    : "暂未获取";
   document.querySelector("#tcpPorts").value = (
     state.settings?.tcpPorts || []
   ).join(", ");
@@ -115,4 +131,18 @@ export function renderDashboard(state, query = "") {
         )
         .join("")
     : '<div class="empty">暂无操作记录</div>';
+}
+
+export function renderHistory(rows) {
+  if (!rows.length) return '<div class="empty">暂无历史上报记录</div>';
+  return `<div class="history-scroll"><table class="history-table"><thead><tr><th>上报 IP / 网段</th><th>地区与运营商</th><th>结果</th><th>时间</th></tr></thead><tbody>${rows
+    .map(
+      (row) => `<tr>
+        <td><code>${escapeHtml(row.observed_ip)}</code><br><small>${escapeHtml(row.network)} · ${escapeHtml(row.source)}</small></td>
+        <td>${escapeHtml(locationText(row))}<br><small>${escapeHtml(row.isp || "—")}</small></td>
+        <td>${row.status === "added" ? "新增" : "已存在"}</td>
+        <td><small>${formatTime(row.created_at)}</small></td>
+      </tr>`,
+    )
+    .join("")}</tbody></table></div>`;
 }

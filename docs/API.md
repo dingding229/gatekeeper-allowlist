@@ -14,7 +14,7 @@ Authorization: Bearer awl_xxx
 X-API-Key: awl_xxx
 ```
 
-兼容 `?key=awl_xxx`，但 URL 可能进入代理日志，不建议使用。
+出于防止密钥进入代理日志和浏览器历史的考虑，不支持 URL 查询参数传递 API Key。
 
 ## 添加网段
 
@@ -32,7 +32,7 @@ Authorization: Bearer awl_xxx
 {"ip":"203.0.113.8","source":"office"}
 ```
 
-服务端会把 IPv4 规范化为所属 `/24`，IPv6 规范化为所属 `/64`。新网段返回 `201`，已存在的网段返回 `200`。每个 Key 最多保留 3 个不同网段，第 4 个会淘汰最早加入的网段。
+服务端会把 IPv4 规范化为所属 `/24`，IPv6 规范化为所属 `/64`。新网段返回 `201`，已存在的网段返回 `200`。每个用户默认保留 3 个不同网段，管理员可在后台调整为 1–100 个；超出配额会淘汰最早加入的网段。每次成功上报都会写入历史记录，并异步查询公网 IP 的地区和运营商，查询失败不影响加白。
 
 ```json
 {
@@ -47,6 +47,17 @@ Authorization: Bearer awl_xxx
 ```
 
 `ips` 中的每一项还包含 `source`、创建时间和最后上报时间。
+
+## 访问频率
+
+同一用户的全部客户端接口共用限额：每 60 秒最多访问 1 次。API Key 与该用户的 Surge 专属令牌计入同一个限额。超限时返回：
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 42
+RateLimit-Limit: 1
+RateLimit-Remaining: 0
+```
 
 ## 查询当前 Key 的网段
 
@@ -72,6 +83,7 @@ GET /health
 | 400 | `invalid_ip` | IP 地址格式错误 |
 | 401 | `missing_api_key` | 未提供 Key |
 | 401 | `invalid_api_key` | Key 错误、已轮换或用户已停用 |
+| 429 | `rate_limit_exceeded` | 该用户在最近 60 秒内已访问客户端 API |
 | 500 | `internal_error` | 服务端异常 |
 
-管理员接口供自带 Web 后台使用，通过 HttpOnly 会话 Cookie 鉴权，不作为公开集成接口。防火墙快照接口只应允许本机访问。后台保存端口设置后，宿主机 systemd 任务会在一分钟内同步到 nftables。
+管理员接口供自带 Web 后台使用，通过 HttpOnly 会话 Cookie 鉴权，不作为公开集成接口。防火墙快照和版本通知接口只允许本机访问，Caddy 对公网统一返回 404。用户新增、淘汰、移除、清空、启停和端口设置变更后，宿主机即时同步服务会刷新 nftables；每分钟定时器作为失败兜底。

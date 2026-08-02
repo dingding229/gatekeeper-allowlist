@@ -1,5 +1,7 @@
 import express from "express";
+import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
+import { createIpInfoService } from "./ip-info.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import { createSecurityHeaders } from "./middleware/security-headers.js";
 import { createRepository } from "./repository.js";
@@ -10,9 +12,14 @@ import { createSurgeRouter } from "./routes/surge.js";
 
 const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
 
-export function createApp({ db, config }) {
+export function createApp({ db, config, services = {} }) {
   const app = express();
-  const repository = createRepository(db);
+  const firewallEvents = new EventEmitter();
+  firewallEvents.setMaxListeners(100);
+  const repository = createRepository(db, {
+    onFirewallChange: (revision) => firewallEvents.emit("change", revision),
+  });
+  const ipInfo = services.ipInfo || createIpInfoService({ config });
   const auth = createAuthMiddleware({ repository, config });
 
   if (config.trustProxy) app.set("trust proxy", 1);
@@ -27,12 +34,18 @@ export function createApp({ db, config }) {
   });
 
   app.use("/api/v1/surge", createSurgeRouter({ repository, config }));
-  app.use("/api/v1", createAllowlistRouter({ repository, apiAuth: auth.api }));
+  app.use(
+    "/api/v1",
+    createAllowlistRouter({ repository, apiAuth: auth.api, ipInfo }),
+  );
   app.use(
     "/api/admin",
-    createAdminRouter({ repository, adminAuth: auth.admin, config }),
+    createAdminRouter({ repository, adminAuth: auth.admin, config, ipInfo }),
   );
-  app.use("/api/internal", createInternalRouter({ repository, config }));
+  app.use(
+    "/api/internal",
+    createInternalRouter({ repository, config, firewallEvents }),
+  );
   app.use("/api", (_req, res) => res.status(404).json({ error: "not_found" }));
   app.use(
     config.adminPath,

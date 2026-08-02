@@ -41,3 +41,18 @@ test("config derives and validates the public base URL", () => {
     /without a path/,
   );
 });
+
+test("IP information endpoints require HTTPS and bounded timeouts", () => {
+  assert.throws(
+    () => loadConfig({ IP_GEOLOCATION_URL: "http://example.com/{ip}" }),
+    /must use HTTPS/,
+  );
+  assert.throws(
+    () => loadConfig({ IP_LOOKUP_TIMEOUT_MS: "100" }),
+    /between 500 and 15000/,
+  );
+  assert.equal(
+    loadConfig({ IP_GEOLOCATION_ENABLED: "0" }).ipGeolocationEnabled,
+    false,
+  );
+});

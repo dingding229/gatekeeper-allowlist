@@ -4,7 +4,7 @@ export function createAuthMiddleware({ repository, config }) {
   return {
     api(req, res, next) {
       const bearer = req.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-      const rawKey = bearer || req.get("x-api-key") || req.query.key;
+      const rawKey = bearer || req.get("x-api-key");
       const apiKey = Array.isArray(rawKey) ? rawKey[0] : rawKey;
       if (!apiKey) return res.status(401).json({ error: "missing_api_key" });
 
@@ -13,6 +13,23 @@ export function createAuthMiddleware({ repository, config }) {
         ? repository.findUserById(surgeUserId, true)
         : repository.findEnabledUserByApiKey(apiKey);
       if (!user) return res.status(401).json({ error: "invalid_api_key" });
+      const rate = repository.consumeApiRequest(
+        user.id,
+        Date.now(),
+        config.apiRateLimitWindowMs ?? 60_000,
+      );
+      res.set("RateLimit-Limit", "1");
+      if (!rate.allowed) {
+        res.set({
+          "Retry-After": String(rate.retryAfter),
+          "RateLimit-Remaining": "0",
+        });
+        return res.status(429).json({
+          error: "rate_limit_exceeded",
+          retryAfter: rate.retryAfter,
+        });
+      }
+      res.set("RateLimit-Remaining", "0");
       req.user = user;
       next();
     },

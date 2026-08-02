@@ -21,6 +21,22 @@ const syncService = readFileSync(
   new URL("../deploy/systemd/gatekeeper-sync.service", import.meta.url),
   "utf8",
 );
+const listenerService = readFileSync(
+  new URL(
+    "../deploy/systemd/gatekeeper-sync-listener.service",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const watcher = readFileSync(
+  new URL("../scripts/watch-firewall.sh", import.meta.url),
+  "utf8",
+);
+const installer = readFileSync(
+  new URL("../install.sh", import.meta.url),
+  "utf8",
+);
+const updater = readFileSync(new URL("../update.sh", import.meta.url), "utf8");
 
 test("nftables policy covers host input and Docker forwarded ports", () => {
   assert.match(template, /hook input/);
@@ -61,6 +77,16 @@ test("systemd sync service requires the firewall and supports custom paths", () 
     syncService,
     /ExecStart=__INSTALL_DIR__\/scripts\/sync-nftables\.sh/,
   );
+  assert.match(listenerService, /Requires=gatekeeper-firewall\.service/);
+  assert.match(listenerService, /Restart=always/);
+  assert.match(
+    listenerService,
+    /ExecStart=__INSTALL_DIR__\/scripts\/watch-firewall\.sh/,
+  );
+  assert.match(watcher, /firewall-revision\?since=/);
+  assert.match(watcher, /sync-nftables\.sh/);
+  assert.match(installer, /enable --now gatekeeper-sync-listener\.service/);
+  assert.match(updater, /enable --now gatekeeper-sync-listener\.service/);
 });
 
 test("nftables installer validates then atomically writes the config", (t) => {

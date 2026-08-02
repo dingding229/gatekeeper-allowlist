@@ -1,0 +1,16 @@
+[Unit]
+Description=Synchronize Gatekeeper firewall immediately after changes
+After=network-online.target docker.service gatekeeper-firewall.service
+Wants=network-online.target
+Requires=gatekeeper-firewall.service
+ConditionPathExists=/etc/gatekeeper/gatekeeper-sync.env
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/gatekeeper/gatekeeper-sync.env
+ExecStart=__INSTALL_DIR__/scripts/watch-firewall.sh
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

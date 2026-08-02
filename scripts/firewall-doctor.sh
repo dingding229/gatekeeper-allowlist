@@ -14,6 +14,7 @@ check_unit() {
 
 printf 'Gatekeeper 防火墙诊断\n\n'
 check_unit "防火墙服务" gatekeeper-firewall.service
+check_unit "即时同步服务" gatekeeper-sync-listener.service
 check_unit "同步定时器" gatekeeper-sync.timer
 
 enabled="$(systemctl is-enabled gatekeeper-firewall.service 2>/dev/null || true)"
@@ -58,6 +59,6 @@ if [ "$failed" -eq 0 ]; then
   echo "结论：防火墙运行正常"
 else
   echo "结论：防火墙存在异常，请查看："
-  echo "  journalctl -u gatekeeper-firewall.service -u gatekeeper-sync.service -n 80 --no-pager"
+  echo "  journalctl -u gatekeeper-firewall.service -u gatekeeper-sync-listener.service -u gatekeeper-sync.service -n 80 --no-pager"
 fi
 exit "$failed"
