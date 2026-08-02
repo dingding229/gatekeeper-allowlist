@@ -105,7 +105,7 @@ curl -fsSL "https://github.com/$REPOSITORY/archive/refs/heads/$BRANCH.tar.gz" \
 info "更新程序文件（保留数据库、证书和 .env）"
 cp -a "$TEMP_DIR/." "$INSTALL_DIR/"
 set_env_value ADMIN_PATH "/$ADMIN_PATH"
-chmod 755 "$INSTALL_DIR/scripts/sync-nftables.sh"
+chmod 755 "$INSTALL_DIR/scripts/sync-nftables.sh" "$INSTALL_DIR/scripts/render-nftables.sh"
 cd "$INSTALL_DIR"
 
 info "重新构建并启动服务"
@@ -159,17 +159,11 @@ if ((ENABLE_FIREWALL)); then
     fail "当前 SSH 网段 $CURRENT_NETWORK 不在白名单中。请先用 API Key 上报当前 IP，再重新运行更新脚本"
   fi
 
-  IPV4_ELEMENTS="${IPV4:+elements = { $IPV4 };}"
-  IPV6_ELEMENTS="${IPV6:+elements = { $IPV6 };}"
-  TCP_PORT_ELEMENTS="${TCP_ELEMENTS:+elements = { $TCP_ELEMENTS };}"
-  UDP_PORT_ELEMENTS="${UDP_ELEMENTS:+elements = { $UDP_ELEMENTS };}"
   install -d -m 0700 "$CONFIG_DIR"
-  sed \
-    -e "s|__INITIAL_IPV4_ELEMENTS__|$IPV4_ELEMENTS|g" \
-    -e "s|__INITIAL_IPV6_ELEMENTS__|$IPV6_ELEMENTS|g" \
-    -e "s|__INITIAL_TCP_PORT_ELEMENTS__|$TCP_PORT_ELEMENTS|g" \
-    -e "s|__INITIAL_UDP_PORT_ELEMENTS__|$UDP_PORT_ELEMENTS|g" \
-    deploy/nftables/gatekeeper.nft.template >"$CONFIG_DIR/gatekeeper.nft"
+  scripts/render-nftables.sh \
+    deploy/nftables/gatekeeper.nft.template \
+    "$IPV4" "$IPV6" "$TCP_ELEMENTS" "$UDP_ELEMENTS" \
+    >"$CONFIG_DIR/gatekeeper.nft"
   nft -c -f "$CONFIG_DIR/gatekeeper.nft"
   if ((NEW_FIREWALL)); then
     cat >"$CONFIG_DIR/gatekeeper-sync.env" <<EOF

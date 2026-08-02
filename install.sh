@@ -220,7 +220,7 @@ TRUST_PROXY=1
 COOKIE_SECURE=1
 EOF
 chmod 600 .env
-chmod 755 scripts/sync-nftables.sh
+chmod 755 scripts/sync-nftables.sh scripts/render-nftables.sh
 
 info "构建并启动 Gatekeeper 与 Caddy"
 docker compose up -d --build
@@ -248,15 +248,10 @@ if ((ENABLE_FIREWALL)); then
     INITIAL_IPV4="$INITIAL_NETWORK"
     INITIAL_IPV6=""
   fi
-  INITIAL_IPV4_ELEMENTS="${INITIAL_IPV4:+elements = { $INITIAL_IPV4 };}"
-  INITIAL_IPV6_ELEMENTS="${INITIAL_IPV6:+elements = { $INITIAL_IPV6 };}"
-  INITIAL_TCP_PORT_ELEMENTS="elements = { $SSH_PORT };"
-  sed \
-    -e "s|__INITIAL_IPV4_ELEMENTS__|$INITIAL_IPV4_ELEMENTS|g" \
-    -e "s|__INITIAL_IPV6_ELEMENTS__|$INITIAL_IPV6_ELEMENTS|g" \
-    -e "s|__INITIAL_TCP_PORT_ELEMENTS__|$INITIAL_TCP_PORT_ELEMENTS|g" \
-    -e "s|__INITIAL_UDP_PORT_ELEMENTS__||g" \
-    deploy/nftables/gatekeeper.nft.template >"$CONFIG_DIR/gatekeeper.nft"
+  scripts/render-nftables.sh \
+    deploy/nftables/gatekeeper.nft.template \
+    "$INITIAL_IPV4" "$INITIAL_IPV6" "$SSH_PORT" "" \
+    >"$CONFIG_DIR/gatekeeper.nft"
   nft -c -f "$CONFIG_DIR/gatekeeper.nft"
 
   cat >"$CONFIG_DIR/gatekeeper-sync.env" <<EOF
