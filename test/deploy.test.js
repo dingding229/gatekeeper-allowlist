@@ -120,9 +120,11 @@ test("deployment installs validated off-volume backups and restore tooling", () 
 test("updater bypasses source caches and verifies the running version", () => {
   assert.match(updater, /Cache-Control: no-cache/);
   assert.match(updater, /--force-recreate gatekeeper/);
+  assert.match(updater, /--force-recreate caddy/);
   assert.match(updater, /EXPECTED_VERSION/);
   assert.match(updater, /DEPLOYED_VERSION/);
   assert.match(updater, /版本校验失败/);
+  assert.match(updater, /公网域名版本校验通过/);
 });
 
 test("nftables installer validates then atomically writes the config", (t) => {

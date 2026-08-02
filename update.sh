@@ -214,7 +214,7 @@ cd "$INSTALL_DIR"
 
 info "重新构建并启动服务"
 docker compose up -d --build --force-recreate gatekeeper
-docker compose up -d caddy
+docker compose up -d --force-recreate caddy
 HEALTH_JSON=""
 for _ in $(seq 1 60); do
   HEALTH_JSON="$(curl -fsS http://127.0.0.1:8787/health 2>/dev/null || true)"
@@ -227,6 +227,24 @@ if [[ "$DEPLOYED_VERSION" != "$EXPECTED_VERSION" ]]; then
   fail "版本校验失败：已下载 v$EXPECTED_VERSION，当前容器为 v${DEPLOYED_VERSION:-未知}"
 fi
 info "容器版本校验通过：v$DEPLOYED_VERSION"
+
+DOMAIN="$(env_value DOMAIN)"
+PUBLIC_HEALTH_JSON=""
+PUBLIC_VERSION=""
+for _ in $(seq 1 15); do
+  PUBLIC_HEALTH_JSON="$(curl -fsS --max-time 5 \
+    "https://$DOMAIN/health?deployment=$EXPECTED_VERSION" 2>/dev/null || true)"
+  PUBLIC_VERSION="$(printf '%s' "$PUBLIC_HEALTH_JSON" \
+    | jq -r '.version // empty' 2>/dev/null || true)"
+  [[ "$PUBLIC_VERSION" == "$EXPECTED_VERSION" ]] && break
+  sleep 2
+done
+if [[ "$PUBLIC_VERSION" != "$EXPECTED_VERSION" ]]; then
+  warn "公网域名版本校验失败：https://$DOMAIN/health 返回 v${PUBLIC_VERSION:-未知}"
+  warn "容器本机已是 v$DEPLOYED_VERSION，请检查域名 DNS 是否指向当前服务器"
+else
+  info "公网域名版本校验通过：v$PUBLIC_VERSION"
+fi
 
 if ((ENABLE_FIREWALL)); then
   if ((NEW_FIREWALL)); then
@@ -322,7 +340,6 @@ systemctl is-active --quiet gatekeeper-backup.timer || fail "备份定时器未�
 info "创建更新后数据库备份"
 scripts/backup.sh >/dev/null
 
-DOMAIN="$(env_value DOMAIN)"
 printf '\n%b更新完成%b\n' "$green" "$reset"
 printf '服务端版本: v%s\n' "$DEPLOYED_VERSION"
 printf '后台地址: https://%s/%s/\n' "$DOMAIN" "$ADMIN_PATH"
