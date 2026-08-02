@@ -108,6 +108,7 @@ test("systemd sync service requires the firewall and supports custom paths", () 
 
 test("deployment installs validated off-volume backups and restore tooling", () => {
   assert.match(backupScript, /VACUUM INTO/);
+  assert.doesNotMatch(backupScript, /\$\{path\}/);
   assert.match(backupScript, /PRAGMA quick_check/);
   assert.match(backupScript, /\/var\/backups\/gatekeeper/);
   assert.match(restoreScript, /sqlite3 .*PRAGMA quick_check/);

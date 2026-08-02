@@ -31,7 +31,7 @@ docker compose exec -T -e BACKUP_PATH="$container_backup" gatekeeper \
     const db = new DatabaseSync("/app/data/allowlist.db");
     const path = process.env.BACKUP_PATH;
     if (!/^\/app\/data\/[A-Za-z0-9._-]+\.db$/.test(path)) throw new Error("invalid backup path");
-    db.exec(`VACUUM INTO '${path}'`);
+    db.prepare("VACUUM INTO ?").run(path);
     const check = new DatabaseSync(path, { readOnly: true }).prepare("PRAGMA quick_check").get();
     if (check.quick_check !== "ok") throw new Error("backup quick_check failed");
     db.close();
