@@ -13,8 +13,6 @@ function runSurge({
   postResponse,
   lookupIp = "8.8.8.8",
   lookupError = null,
-  scriptType = "cron",
-  trigger,
 } = {}) {
   const store = new Map(
     Object.entries({
@@ -29,8 +27,6 @@ function runSurge({
   const context = {
     $argument:
       "url=https%3A%2F%2Fallowlist.example.com&key=sg_test&cooldown=30",
-    $script: { type: scriptType, name: "gatekeeper-test" },
-    $trigger: trigger,
     $persistentStore: {
       read: (key) => store.get(key) || null,
       write: (value, key) => {
@@ -131,61 +127,28 @@ test("Surge sends a stable per-installation device identity", () => {
   assert.equal(payload.deviceName, "Surge");
 });
 
-test("Surge skips the Gatekeeper API when the public IP is unchanged", () => {
-  const { result, requests, posts } = runSurge({
+test("Surge submits on every trigger even when the public IP is unchanged", () => {
+  const { requests, posts } = runSurge({
     initialStore: {
       gatekeeper_last_reported_ip_device_test_01: "8.8.8.8",
     },
   });
-  assert.equal(requests, 1);
-  assert.equal(posts, 0);
-  assert.match(result.title, /IP 未变化/);
-  assert.match(result.content, /未调用上报接口/);
-});
-
-test("Surge reports a changed IP and stores it only after success", () => {
-  const { posts, store } = runSurge({
-    initialStore: {
-      gatekeeper_last_reported_ip_device_test_01: "1.1.1.1",
-    },
-    lookupIp: "8.8.8.8",
-  });
+  assert.equal(requests, 2);
   assert.equal(posts, 1);
-  assert.equal(
-    store.get("gatekeeper_last_reported_ip_device_test_01"),
-    "8.8.8.8",
-  );
-
-  const failed = runSurge({
-    initialStore: {
-      gatekeeper_last_reported_ip_device_test_01: "1.1.1.1",
-    },
-    lookupIp: "8.8.8.8",
-    postResponse: {
-      status: 500,
-      body: { error: "internal_error" },
-    },
-  });
-  assert.equal(
-    failed.store.get("gatekeeper_last_reported_ip_device_test_01"),
-    "1.1.1.1",
-  );
 });
 
-test("Surge panel button can force recovery when the IP is unchanged", () => {
-  const { posts, postOptions } = runSurge({
-    initialStore: {
-      gatekeeper_last_reported_ip_device_test_01: "8.8.8.8",
-    },
-    scriptType: "generic",
-    trigger: "button",
-  });
+test("Surge submits the IPCheck address and metadata", () => {
+  const { posts, postOptions } = runSurge({ lookupIp: "8.8.8.8" });
   assert.equal(posts, 1);
-  assert.equal(JSON.parse(postOptions.body).source, "surge-manual");
+  const payload = JSON.parse(postOptions.body);
+  assert.equal(payload.ip, "8.8.8.8");
+  assert.equal(payload.ipInfo.city, "Test");
 });
 
-test("Surge does not call Gatekeeper when public IP lookup fails", () => {
-  const { result, posts } = runSurge({ lookupError: "timeout" });
-  assert.equal(posts, 0);
-  assert.match(result.title, /IP 检测失败/);
+test("Surge still submits when public IP lookup fails", () => {
+  const { posts, postOptions } = runSurge({ lookupError: "timeout" });
+  assert.equal(posts, 1);
+  const payload = JSON.parse(postOptions.body);
+  assert.equal(payload.ip, undefined);
+  assert.equal(payload.ipInfo, undefined);
 });

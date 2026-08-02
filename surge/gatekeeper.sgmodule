@@ -1,5 +1,5 @@
 #!name=Gatekeeper 自动加白
-#!desc=定期检查 Surge 当前出口 IP，自动任务仅在 IP 变化时上报，面板按钮可手动强制上报。
+#!desc=每次定时、网络切换或面板触发都上报当前出口 IP，由 Gatekeeper 幂等处理重复网段。
 #!category=Gatekeeper
 #!author=dingding229
 #!arguments=domain:"",url:"",key:"",interval:"3",cooldown:"30",device:"Surge"
@@ -11,9 +11,9 @@ DOMAIN,{{{domain}}},DIRECT,extended-matching
 DOMAIN,64.ipcheck.ing,DIRECT,extended-matching
 
 [Script]
-gatekeeper-cron = type=cron,cronexp="*/{{{interval}}} * * * *",script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-5,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&device={{{device}}}"
-gatekeeper-event = type=event,event-name=network-changed,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-5,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&device={{{device}}}"
-gatekeeper-panel = type=generic,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-5,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&device={{{device}}}"
+gatekeeper-cron = type=cron,cronexp="*/{{{interval}}} * * * *",script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-6,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&device={{{device}}}"
+gatekeeper-event = type=event,event-name=network-changed,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-6,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&device={{{device}}}"
+gatekeeper-panel = type=generic,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-6,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&device={{{device}}}"
 
 [Panel]
-gatekeeper_manual_panel = title="Gatekeeper 自动加白",content="点击右上角刷新可强制上报当前 IP",style=info,script-name=gatekeeper-panel
+gatekeeper_manual_panel = title="Gatekeeper 自动加白",content="点击右上角刷新上报当前 IP",style=info,script-name=gatekeeper-panel

@@ -1,5 +1,5 @@
 const SCRIPT_URL =
-  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-5";
+  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-6";
 
 const safeLabel = (value) =>
   String(value || "user")
@@ -19,7 +19,7 @@ export function renderSurgeModule({
   const argument = `url=${encodeURIComponent(publicBaseUrl)}&key=${encodeURIComponent(token)}&cooldown=${Math.max(1, Math.ceil(cooldownSeconds))}&device={{{device}}}`;
 
   return `#!name=Gatekeeper - ${label}
-#!desc=${label} 专属网段自动加白；自动任务仅在出口 IP 变化时上报，面板按钮可手动强制上报。
+#!desc=${label} 专属网段自动加白；每次有效触发都上报，由服务端幂等处理重复网段。
 #!category=Gatekeeper
 #!author=dingding229
 #!arguments=interval:"3",device:"Surge"
@@ -35,6 +35,6 @@ gatekeeper_${suffix}_event = type=event,event-name=network-changed,script-path=$
 gatekeeper_${suffix}_panel_script = type=generic,script-path=${SCRIPT_URL},script-update-interval=300,timeout=30,argument="${argument}"
 
 [Panel]
-gatekeeper_${suffix}_panel = title="Gatekeeper · ${label}",content="点击右上角刷新可强制上报当前 IP",style=info,script-name=gatekeeper_${suffix}_panel_script
+gatekeeper_${suffix}_panel = title="Gatekeeper · ${label}",content="点击右上角刷新上报当前 IP",style=info,script-name=gatekeeper_${suffix}_panel_script
 `;
 }
