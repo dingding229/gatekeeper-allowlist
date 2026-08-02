@@ -1,5 +1,5 @@
 const SCRIPT_URL =
-  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js";
+  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-2";
 
 const safeLabel = (value) =>
   String(value || "user")

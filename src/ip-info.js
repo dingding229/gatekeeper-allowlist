@@ -77,7 +77,10 @@ export function createIpInfoService({ config, fetchImpl = fetch } = {}) {
 
   return {
     async getServerInfo() {
-      if (serverCache && Date.now() - serverCache.cachedAt < 10 * 60 * 1000) {
+      if (
+        serverCache &&
+        Date.now() - serverCache.cachedAt < serverCache.maxAge
+      ) {
         return serverCache.value;
       }
       if (serverPromise) return serverPromise;
@@ -103,8 +106,16 @@ export function createIpInfoService({ config, fetchImpl = fetch } = {}) {
             updatedAt: new Date().toISOString(),
             available: details.length > 0,
             source: "ipcheck.ing",
+            errors: results
+              .filter((result) => result.status === "rejected")
+              .map((result) => clean(result.reason?.message, 160))
+              .filter(Boolean),
           };
-          serverCache = { cachedAt: Date.now(), value };
+          serverCache = {
+            cachedAt: Date.now(),
+            maxAge: details.length ? 10 * 60 * 1000 : 30 * 1000,
+            value,
+          };
           return value;
         })
         .finally(() => {

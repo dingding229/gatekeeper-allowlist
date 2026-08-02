@@ -3,12 +3,19 @@ import { createApiKey, normalizeNetwork, sha256 } from "./security.js";
 
 const activeIpQuery = `
   SELECT w.id, w.ip, w.family, w.source, w.created_at, w.last_seen_at,
-         h.observed_ip, h.country, h.region, h.city, h.isp, h.geo_source
+         h.observed_ip, g.country, g.region, g.city, g.isp, g.geo_source
   FROM whitelist_ips w
   LEFT JOIN ip_history h ON h.id = (
     SELECT latest.id FROM ip_history latest
     WHERE latest.user_id = w.user_id AND latest.network = w.ip
     ORDER BY latest.id DESC LIMIT 1
+  )
+  LEFT JOIN ip_history g ON g.id = (
+    SELECT geo.id FROM ip_history geo
+    WHERE geo.user_id = w.user_id AND geo.network = w.ip
+      AND (geo.country IS NOT NULL OR geo.region IS NOT NULL
+           OR geo.city IS NOT NULL OR geo.isp IS NOT NULL)
+    ORDER BY geo.id DESC LIMIT 1
   )
 `;
 

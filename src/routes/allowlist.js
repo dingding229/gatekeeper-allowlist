@@ -44,6 +44,7 @@ export function createAllowlistRouter({ repository, apiAuth }) {
         evicted: result.evicted,
         slots: ips.length,
         limit: result.limit,
+        ipInfoRecorded: Boolean(location),
         ips,
       });
     } catch (error) {

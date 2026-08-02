@@ -115,3 +115,22 @@ test("API rate limit is atomic per user", () => {
   );
   db.close();
 });
+
+test("a later report without metadata preserves the last known IP location", () => {
+  const { db, repository } = setup();
+  const user = repository.createUser("geo-history");
+  const first = repository.addIp(user.id, "8.8.8.8", "8.8.8.0/24", 4, "surge");
+  repository.updateHistoryLocation(first.historyId, {
+    country: "美国",
+    city: "Mountain View",
+    isp: "Example ISP",
+    source: "ipcheck.ing",
+  });
+  repository.addIp(user.id, "8.8.8.9", "8.8.8.0/24", 4, "api");
+
+  const [active] = repository.listUserIps(user.id);
+  assert.equal(active.observed_ip, "8.8.8.9");
+  assert.equal(active.city, "Mountain View");
+  assert.equal(active.geo_source, "ipcheck.ing");
+  db.close();
+});

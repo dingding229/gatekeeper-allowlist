@@ -20,7 +20,7 @@ const actionNames = {
 
 const locationText = (ip) =>
   [ip.country, ip.region, ip.city].filter(Boolean).join(" · ") ||
-  "地区查询中或不可用";
+  "尚无地区信息，等待 Surge 下次成功查询";
 
 function renderIpRows(ips) {
   if (!ips.length)
@@ -101,6 +101,10 @@ export function renderDashboard(state, query = "") {
   document.querySelector("#serverIps").textContent = state.server?.ips?.length
     ? state.server.ips.join(" / ")
     : "暂未获取";
+  document.querySelector("#serverIpStatus").textContent = state.server
+    ?.available
+    ? "通过 IPCheck.ing 查询，最多缓存 10 分钟"
+    : `IPCheck.ing 查询失败，30 秒后重试${state.server?.errors?.[0] ? `：${state.server.errors[0]}` : ""}`;
   document.querySelector("#tcpPorts").value = (
     state.settings?.tcpPorts || []
   ).join(", ");

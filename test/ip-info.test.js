@@ -53,3 +53,13 @@ test("IPCheck requests use a CLI user agent to avoid browser challenges", async 
   await service.getServerInfo();
   assert.match(headers["User-Agent"], /^curl\//);
 });
+
+test("IPCheck failures are exposed for dashboard diagnosis", async () => {
+  const service = createIpInfoService({
+    config: { serverIpLookupUrls: ["https://4.ipcheck.ing/geo"] },
+    fetchImpl: async () => ({ ok: false, status: 403 }),
+  });
+  const info = await service.getServerInfo();
+  assert.equal(info.available, false);
+  assert.match(info.errors[0], /HTTP 403/);
+});

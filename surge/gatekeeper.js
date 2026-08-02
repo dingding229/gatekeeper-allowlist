@@ -44,79 +44,95 @@ if (
       payload.ipInfo = ipInfo;
     }
     $httpClient.post(
-    {
-      url: baseUrl + "/api/v1/whitelist",
-      headers: {
-        Authorization: "Bearer " + apiKey,
-        "Content-Type": "application/json",
+      {
+        url: baseUrl + "/api/v1/whitelist",
+        headers: {
+          Authorization: "Bearer " + apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        timeout: 15,
       },
-      body: JSON.stringify(payload),
-      timeout: 15,
-    },
-    function (error, response, body) {
-      var status = response && (response.status || response.statusCode);
-      var data;
-      try {
-        data = JSON.parse(body || "{}");
-      } catch (_error) {
-        data = null;
-      }
+      function (error, response, body) {
+        var status = response && (response.status || response.statusCode);
+        var data;
+        try {
+          data = JSON.parse(body || "{}");
+        } catch (_error) {
+          data = null;
+        }
 
-      if (error || status < 200 || status >= 300 || !data || !data.ok) {
-        var reason = error
-          ? String(error)
-          : "HTTP " + String(status || "?") + " " + String(body || "").slice(0, 80);
-        $notification.post("Gatekeeper 自动加白", "上报失败", reason);
-        finish("Gatekeeper：上报失败", reason, false);
-        return;
-      }
+        if (error || status < 200 || status >= 300 || !data || !data.ok) {
+          var reason = error
+            ? String(error)
+            : "HTTP " +
+              String(status || "?") +
+              " " +
+              String(body || "").slice(0, 80);
+          $notification.post("Gatekeeper 自动加白", "上报失败", reason);
+          finish("Gatekeeper：上报失败", reason, false);
+          return;
+        }
 
-      var networks = Array.isArray(data.ips)
-        ? data.ips.map(function (item) {
-            return typeof item === "string" ? item : item.ip;
-          })
-        : [];
-      var title =
-        "Gatekeeper " + data.slots + "/" + data.limit + " · " + data.ip;
-      var content =
-        (data.status === "added" ? "已加入网段" : "网段已在白名单") +
-        "\n" +
-        networks.join("\n") +
-        "\n更新时间：" +
-        new Date().toLocaleString();
-      var state = data.ip + "|" + networks.join(",");
-      var previous = $persistentStore.read(STATE_KEY);
-      if (previous !== state) {
-        $persistentStore.write(state, STATE_KEY);
-        $notification.post("Gatekeeper 自动加白", title, content);
-      }
-      finish(title, content, true);
-    },
+        var networks = Array.isArray(data.ips)
+          ? data.ips.map(function (item) {
+              return typeof item === "string" ? item : item.ip;
+            })
+          : [];
+        var title =
+          "Gatekeeper " + data.slots + "/" + data.limit + " · " + data.ip;
+        var content =
+          (data.status === "added" ? "已加入网段" : "网段已在白名单") +
+          (data.ipInfoRecorded ? " · IP 信息已更新" : " · IP 信息查询失败") +
+          "\n" +
+          networks.join("\n") +
+          "\n更新时间：" +
+          new Date().toLocaleString();
+        var state = data.ip + "|" + networks.join(",");
+        var previous = $persistentStore.read(STATE_KEY);
+        if (previous !== state) {
+          $persistentStore.write(state, STATE_KEY);
+          $notification.post("Gatekeeper 自动加白", title, content);
+        }
+        finish(title, content, true);
+      },
     );
   }
 
   $httpClient.get(
     {
       url: "https://64.ipcheck.ing/geo",
-      headers: { "User-Agent": "curl/8.0 Gatekeeper-Surge/1.0" },
+      headers: {
+        Accept: "text/plain",
+        "User-Agent": "curl/8.7.1",
+      },
       timeout: 10,
     },
     function (error, response, body) {
       var status = response && (response.status || response.statusCode);
       if (error || status < 200 || status >= 300) return report(null);
       var fields = {};
-      String(body || "").split(/\r?\n/).forEach(function (line) {
-        var separator = line.indexOf(":");
-        if (separator > 0) fields[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
-      });
-      report(fields.IP ? {
-        source: "ipcheck.ing",
-        ip: fields.IP,
-        country: fields.Country || "",
-        region: fields.Region || "",
-        city: fields.City || "",
-        isp: fields.Org || ""
-      } : null);
-    }
+      String(body || "")
+        .split(/\r?\n/)
+        .forEach(function (line) {
+          var separator = line.indexOf(":");
+          if (separator > 0)
+            fields[line.slice(0, separator).trim()] = line
+              .slice(separator + 1)
+              .trim();
+        });
+      report(
+        fields.IP
+          ? {
+              source: "ipcheck.ing",
+              ip: fields.IP,
+              country: fields.Country || "",
+              region: fields.Region || "",
+              city: fields.City || "",
+              isp: fields.Org || "",
+            }
+          : null,
+      );
+    },
   );
 }
