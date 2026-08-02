@@ -21,7 +21,7 @@ export function renderSurgeModule({
 
   return `#!name=Gatekeeper - ${label}
 #!version=${SURGE_MODULE_VERSION}
-#!desc=${label} 专属网段自动加白；网络切换立即上报，每 10 分钟定时自愈；模块 v${SURGE_MODULE_VERSION}。
+#!desc=${label} 专属网段自动加白；网络切换立即上报，10 分钟后再定时自愈；模块 v${SURGE_MODULE_VERSION}。
 #!category=Gatekeeper
 #!author=dingding229
 [Rule]

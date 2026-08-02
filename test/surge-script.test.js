@@ -166,13 +166,32 @@ test("Surge suppresses overlapping triggers during the local cooldown", () => {
 });
 
 test("Surge network change events bypass the local cooldown", () => {
+  const before = Date.now();
   const future = Date.now() + 20_000;
-  const { requests, posts } = runSurge({
+  const { requests, posts, store } = runSurge({
     initialStore: { gatekeeper_next_report_device_test_01: String(future) },
     trigger: { type: "event", name: "gatekeeper_1_event" },
   });
   assert.equal(requests, 2);
   assert.equal(posts, 1);
+  assert.ok(
+    Number(store.get("gatekeeper_next_periodic_check_device_test_01")) >=
+      before + 599_000,
+  );
+});
+
+test("Surge postpones periodic self-healing after a network change", () => {
+  const future = Date.now() + 9 * 60_000;
+  const { result, requests, posts } = runSurge({
+    initialStore: {
+      gatekeeper_next_periodic_check_device_test_01: String(future),
+    },
+    trigger: { type: "cron", name: "gatekeeper_1_cron" },
+  });
+  assert.equal(requests, 0);
+  assert.equal(posts, 0);
+  assert.match(result.title, /定时自愈已延后/);
+  assert.match(result.content, /9 分钟后再检查/);
 });
 
 test("Surge learns the current server cooldown after a successful report", () => {

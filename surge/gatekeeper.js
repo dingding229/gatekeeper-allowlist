@@ -1,6 +1,6 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
-var SCRIPT_VERSION = "1.2.6";
+var SCRIPT_VERSION = "1.2.7";
 
 function argumentsFromSurge() {
   var result = {};
@@ -50,11 +50,16 @@ var deviceName = [deviceModel || "Surge", surgeSystem]
   .slice(0, 64);
 var STATE_KEY = "gatekeeper_allowlist_state_" + deviceId;
 var NEXT_REPORT_KEY = "gatekeeper_next_report_" + deviceId;
+var NEXT_PERIODIC_CHECK_KEY = "gatekeeper_next_periodic_check_" + deviceId;
+var PERIODIC_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 var scriptContext =
   typeof $script === "object" && $script ? $script : {};
 var isNetworkChange =
   String(scriptContext.type || "") === "event" ||
   /_event$/.test(String(scriptContext.name || ""));
+var isPeriodicCheck =
+  String(scriptContext.type || "") === "cron" ||
+  /_cron$/.test(String(scriptContext.name || ""));
 var cooldownSeconds = parseInt(config.cooldown || "30", 10);
 if (!isFinite(cooldownSeconds) || cooldownSeconds < 1) cooldownSeconds = 30;
 
@@ -133,7 +138,24 @@ if (
 } else {
   var now = Date.now();
   var nextAllowedAt = Number($persistentStore.read(NEXT_REPORT_KEY) || 0);
-  if (nextAllowedAt > now && !isNetworkChange) {
+  var nextPeriodicCheckAt = Number(
+    $persistentStore.read(NEXT_PERIODIC_CHECK_KEY) || 0,
+  );
+  if (isNetworkChange) {
+    $persistentStore.write(
+      String(now + PERIODIC_CHECK_INTERVAL_MS),
+      NEXT_PERIODIC_CHECK_KEY,
+    );
+  }
+  if (isPeriodicCheck && nextPeriodicCheckAt > now) {
+    finish(
+      "Gatekeeper：定时自愈已延后",
+      "网络刚刚发生变化，将在 " +
+        String(Math.ceil((nextPeriodicCheckAt - now) / 60_000)) +
+        " 分钟后再检查",
+      true,
+    );
+  } else if (nextAllowedAt > now && !isNetworkChange) {
     finish(
       "Gatekeeper：无需重复上报",
       "刚刚已经触发过上报，" +
