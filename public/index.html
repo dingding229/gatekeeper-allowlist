@@ -186,6 +186,24 @@
         <button class="primary full" data-close>我已保存</button>
       </div>
     </dialog>
+    <dialog id="surgeDialog">
+      <div class="key-result">
+        <button class="dialog-x" data-close aria-label="关闭">×</button>
+        <div class="success-icon">S</div>
+        <h2>Surge 专属模块</h2>
+        <p class="muted">
+          地址包含该用户的专属授权，请勿公开分享。模块每 3
+          分钟和网络切换时自动加白；手动刷新面板位于 Surge iOS 的策略选择页面。
+        </p>
+        <div class="key-box">
+          <code id="surgeModuleUrl"></code
+          ><button id="copySurgeModule">复制</button>
+        </div>
+        <a id="openSurgeModule" class="primary full" href="#"
+          >在 Surge 中安装</a
+        >
+      </div>
+    </dialog>
     <div id="toast" class="toast"></div>
     <script src="./js/app.js" type="module"></script>
   </body>

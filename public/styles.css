@@ -120,6 +120,9 @@ button {
 .primary:hover {
   background: #105a40;
 }
+a.primary {
+  text-decoration: none;
+}
 .login-card .primary {
   width: 100%;
   margin-top: 24px;

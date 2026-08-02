@@ -19,6 +19,14 @@ export function createRepository(db) {
         .get(sha256(apiKey));
     },
 
+    findUserById(userId, enabledOnly = false) {
+      return db
+        .prepare(
+          `SELECT id, name, enabled FROM users WHERE id = ?${enabledOnly ? " AND enabled = 1" : ""}`,
+        )
+        .get(userId);
+    },
+
     createUser(name) {
       const apiKey = createApiKey();
       const result = db

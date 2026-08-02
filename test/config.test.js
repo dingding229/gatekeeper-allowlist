@@ -25,3 +25,19 @@ test("config validates and normalizes the admin path", () => {
   assert.throws(() => loadConfig({ ADMIN_PATH: "/api" }), /reserved/);
   assert.throws(() => loadConfig({ ADMIN_PATH: "x" }), /ADMIN_PATH/);
 });
+
+test("config derives and validates the public base URL", () => {
+  assert.equal(
+    loadConfig({ DOMAIN: "allowlist.example.com" }).publicBaseUrl,
+    "https://allowlist.example.com",
+  );
+  assert.equal(
+    loadConfig({ PUBLIC_BASE_URL: "https://allowlist.example.com/" })
+      .publicBaseUrl,
+    "https://allowlist.example.com",
+  );
+  assert.throws(
+    () => loadConfig({ PUBLIC_BASE_URL: "https://example.com/path" }),
+    /without a path/,
+  );
+});

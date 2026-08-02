@@ -11,6 +11,7 @@ const config = {
   trustProxy: false,
   cookieSecure: false,
   adminPath: "/manage-test",
+  publicBaseUrl: "https://allowlist.example.test",
 };
 
 async function startTestApp(t) {
@@ -123,6 +124,65 @@ test("admin can update normalized TCP and UDP port ranges", async (t) => {
     tcpPorts: ["22", "8000-9500"],
     udpPorts: ["53", "51820"],
   });
+});
+
+test("admin can obtain a user-specific Surge module and token", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const user = repository.createUser("surge-phone");
+  const otherUser = repository.createUser("surge-tablet");
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const linkResponse = await fetch(
+    `${baseUrl}/api/admin/users/${user.id}/surge-module`,
+    { headers: { Cookie: cookie } },
+  );
+  assert.equal(linkResponse.status, 200);
+  const links = await linkResponse.json();
+  const moduleUrl = new URL(links.moduleUrl);
+  assert.equal(moduleUrl.origin, "https://allowlist.example.test");
+  assert.match(links.installUrl, /^surge:\/\/\/install-module\?url=/);
+
+  const otherLinks = await (
+    await fetch(`${baseUrl}/api/admin/users/${otherUser.id}/surge-module`, {
+      headers: { Cookie: cookie },
+    })
+  ).json();
+  assert.notEqual(otherLinks.moduleUrl, links.moduleUrl);
+
+  const moduleResponse = await fetch(`${baseUrl}${moduleUrl.pathname}`);
+  assert.equal(moduleResponse.status, 200);
+  const moduleText = await moduleResponse.text();
+  assert.match(moduleText, /cronexp="\*\/3 \* \* \* \*"/);
+  assert.match(moduleText, /\[Panel\]/);
+  assert.match(moduleText, /点击右上角刷新按钮手动加白/);
+
+  const surgeToken = moduleUrl.pathname.split("/").at(-2);
+  const tamperedPath = moduleUrl.pathname.replace(
+    surgeToken,
+    `${surgeToken.slice(0, -1)}x`,
+  );
+  assert.equal((await fetch(`${baseUrl}${tamperedPath}`)).status, 404);
+  const addResponse = await fetch(`${baseUrl}/api/v1/whitelist`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${surgeToken}` },
+  });
+  assert.equal(addResponse.status, 201);
+
+  repository.setUserEnabled(user.id, false);
+  assert.equal((await fetch(`${baseUrl}${moduleUrl.pathname}`)).status, 404);
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/api/v1/whitelist`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${surgeToken}` },
+      })
+    ).status,
+    401,
+  );
 });
 
 test("malformed cookies and unknown API routes return JSON errors", async (t) => {

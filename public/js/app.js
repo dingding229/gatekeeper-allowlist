@@ -37,6 +37,12 @@ function showNewKey(apiKey) {
   $("#keyDialog").showModal();
 }
 
+function showSurgeModule(result) {
+  $("#surgeModuleUrl").textContent = result.moduleUrl;
+  $("#openSurgeModule").href = result.installUrl;
+  $("#surgeDialog").showModal();
+}
+
 $("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   $("#loginError").textContent = "";
@@ -87,7 +93,12 @@ $("#copyKey").addEventListener("click", async () => {
 });
 
 document.querySelectorAll("[data-close]").forEach((button) => {
-  button.addEventListener("click", () => $("#keyDialog").close());
+  button.addEventListener("click", () => button.closest("dialog").close());
+});
+
+$("#copySurgeModule").addEventListener("click", async () => {
+  await navigator.clipboard.writeText($("#surgeModuleUrl").textContent);
+  showToast("Surge 模块地址已复制");
 });
 
 $("#searchInput").addEventListener("input", (event) => {
@@ -171,6 +182,15 @@ $("#userList").addEventListener("click", async (event) => {
       );
       showNewKey(result.apiKey);
       await loadDashboard();
+      return;
+    }
+
+    const surgeButton = event.target.closest("[data-surge]");
+    if (surgeButton) {
+      const result = await apiRequest(
+        `/api/admin/users/${surgeButton.dataset.surge}/surge-module`,
+      );
+      showSurgeModule(result);
     }
   } catch {
     showToast("操作失败，请刷新后重试");

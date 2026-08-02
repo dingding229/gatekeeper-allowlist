@@ -4,7 +4,12 @@ import {
   LOGIN_WINDOW_MS,
   SESSION_TTL_MS,
 } from "../constants.js";
-import { createSessionToken, safeEqual, sha256 } from "../security.js";
+import {
+  createSessionToken,
+  createSurgeToken,
+  safeEqual,
+  sha256,
+} from "../security.js";
 import { parsePortRanges } from "../ports.js";
 
 const SESSION_COOKIE = "allowlist_session";
@@ -130,6 +135,24 @@ export function createAdminRouter({ repository, adminAuth, config }) {
       ok: true,
       apiKey,
       warning: "This key is shown only once.",
+    });
+  });
+
+  router.get("/users/:id/surge-module", adminAuth, (req, res) => {
+    const userId = validId(req.params.id);
+    if (!userId) return res.status(400).json({ error: "invalid_user_id" });
+    const user = repository.findUserById(userId);
+    if (!user) return res.status(404).json({ error: "user_not_found" });
+    if (!config.publicBaseUrl || !config.firewallSyncToken) {
+      return res.status(503).json({ error: "surge_module_unavailable" });
+    }
+    const token = createSurgeToken(user.id, config.firewallSyncToken);
+    const moduleUrl = `${config.publicBaseUrl}/api/v1/surge/${encodeURIComponent(token)}/module.sgmodule`;
+    return res.json({
+      ok: true,
+      user: user.name,
+      moduleUrl,
+      installUrl: `surge:///install-module?url=${encodeURIComponent(moduleUrl)}`,
     });
   });
 

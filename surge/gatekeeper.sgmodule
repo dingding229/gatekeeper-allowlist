@@ -1,5 +1,5 @@
 #!name=Gatekeeper 自动加白
-#!desc=在网络切换时及每 10 分钟，将 Surge 当前出口 IP 所属网段自动加入 Gatekeeper 白名单。
+#!desc=在网络切换时及每 3 分钟，将 Surge 当前出口 IP 所属网段自动加入 Gatekeeper 白名单，并提供手动刷新面板。
 #!category=Gatekeeper
 #!author=dingding229
 #!arguments=domain:"",url:"",key:""
@@ -10,9 +10,9 @@
 DOMAIN,{{{domain}}},DIRECT,extended-matching
 
 [Script]
-gatekeeper-cron = type=cron,cronexp="*/10 * * * *",script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js,timeout=30,argument="url={{{url}}}&key={{{key}}}"
+gatekeeper-cron = type=cron,cronexp="*/3 * * * *",script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js,timeout=30,argument="url={{{url}}}&key={{{key}}}"
 gatekeeper-event = type=event,event-name=network-changed,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js,timeout=30,argument="url={{{url}}}&key={{{key}}}"
 gatekeeper-panel = type=generic,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js,timeout=30,argument="url={{{url}}}&key={{{key}}}"
 
 [Panel]
-gatekeeper = script-name=gatekeeper-panel,title=Gatekeeper 自动加白,content=点击刷新,update-interval=300
+gatekeeper_manual_panel = title="Gatekeeper 自动加白",content="点击右上角刷新按钮手动加白",style=info,script-name=gatekeeper-panel,update-interval=180

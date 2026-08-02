@@ -6,13 +6,14 @@ import { createRepository } from "./repository.js";
 import { createAdminRouter } from "./routes/admin.js";
 import { createAllowlistRouter } from "./routes/allowlist.js";
 import { createInternalRouter } from "./routes/internal.js";
+import { createSurgeRouter } from "./routes/surge.js";
 
 const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
 
 export function createApp({ db, config }) {
   const app = express();
   const repository = createRepository(db);
-  const auth = createAuthMiddleware({ repository });
+  const auth = createAuthMiddleware({ repository, config });
 
   if (config.trustProxy) app.set("trust proxy", 1);
   app.disable("x-powered-by");
@@ -25,6 +26,7 @@ export function createApp({ db, config }) {
     res.json({ ok: true });
   });
 
+  app.use("/api/v1/surge", createSurgeRouter({ repository, config }));
   app.use("/api/v1", createAllowlistRouter({ repository, apiAuth: auth.api }));
   app.use(
     "/api/admin",

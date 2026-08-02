@@ -18,8 +18,7 @@ function finish(title, content, ok) {
   $done({
     title: title,
     content: content,
-    icon: ok ? "checkmark.shield" : "exclamationmark.shield",
-    "icon-color": ok ? "#34C759" : "#FF3B30",
+    style: ok ? "good" : "error",
   });
 }
 
@@ -27,11 +26,14 @@ var config = argumentsFromSurge();
 var baseUrl = String(config.url || "").replace(/\/+$/, "");
 var apiKey = String(config.key || "");
 
-if (!/^https:\/\//i.test(baseUrl) || apiKey.indexOf("awl_") !== 0) {
+if (
+  !/^https:\/\//i.test(baseUrl) ||
+  (apiKey.indexOf("awl_") !== 0 && apiKey.indexOf("sg_") !== 0)
+) {
   $notification.post(
     "Gatekeeper 自动加白",
     "模块参数不完整",
-    "请填写 HTTPS 地址、域名和 awl_ 开头的 API Key。",
+    "请填写 HTTPS 地址、域名和 Gatekeeper 授权令牌。",
   );
   finish("Gatekeeper：未配置", "请编辑模块参数 url、domain 和 key", false);
 } else {
@@ -73,7 +75,9 @@ if (!/^https:\/\//i.test(baseUrl) || apiKey.indexOf("awl_") !== 0) {
       var content =
         (data.status === "added" ? "已加入网段" : "网段已在白名单") +
         "\n" +
-        networks.join("\n");
+        networks.join("\n") +
+        "\n更新时间：" +
+        new Date().toLocaleString();
       var state = data.ip + "|" + networks.join(",");
       var previous = $persistentStore.read(STATE_KEY);
       if (previous !== state) {

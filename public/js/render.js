@@ -68,6 +68,7 @@ function renderUser(user, allIps) {
             ${user.enabled ? "停用用户" : "重新启用"}
           </button>
           <button class="ghost" data-rotate="${user.id}">轮换 API Key</button>
+          <button class="ghost" data-surge="${user.id}">Surge 安装地址</button>
         </div>
       </div>
     </article>

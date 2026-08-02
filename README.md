@@ -7,7 +7,8 @@
 - 多用户 API Key，每个 Key 独立维护 3 个网段，按 FIFO 自动轮换。
 - 后台查看用户、网段和审计记录，设置受保护的 TCP/UDP 端口或端口范围。
 - 后台仅在安装时生成的自定义路径开放，直接访问域名根路径返回 404。
-- Surge 在网络切换时和每 10 分钟自动上报当前出口 IP。
+- 后台为每个用户生成独立的 Surge 一键安装地址。
+- Surge 在网络切换时和每 3 分钟自动上报当前出口 IP，并提供手动刷新面板。
 - Caddy 自动 HTTPS、SQLite 持久化、nftables 定时同步。
 
 ## 一键部署
@@ -84,7 +85,24 @@ curl https://你的域名/api/v1/whitelist \
 
 ## Surge 自动添加
 
-在 Surge 中安装模块：
+推荐从后台获取用户专属模块：
+
+1. 登录安装时生成的后台地址。
+2. 展开目标用户，点击“Surge 安装地址”。
+3. 在 Surge 设备上点击“在 Surge 中安装”，或复制地址后导入 Surge。
+
+每个用户的模块地址都包含独立的签名授权令牌，不需要填写或暴露该用户原来的 `awl_` API Key。该地址应当像密码一样保管，不要公开分享。停用用户后，对应模块地址和授权令牌会立即失效；重新启用后原地址恢复可用。修改 `FIREWALL_SYNC_TOKEN` 会使全部既有 Surge 专属地址失效，需要从后台重新获取。
+
+专属模块会：
+
+- 每 3 分钟自动上报一次。
+- 网络切换时立即上报。
+- 在 Surge 的策略页面提供“Gatekeeper”面板，点击面板右上角刷新按钮即可手动上报。
+- 将 Gatekeeper API 域名设为直连，避免代理出口导致识别到错误 IP。
+
+如果看不到手动刷新面板，请在 Surge iOS 的策略选择页面查看，并确认使用 Surge iOS 4.9.3 或更新版本且订阅状态满足面板要求。该功能的官方说明标记为 iOS 专属；即使面板未显示，每 3 分钟和网络切换自动上报仍会继续工作。
+
+下面的公共模板仅作为旧版手动配置兼容方案：
 
 ```text
 https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.sgmodule
@@ -96,7 +114,7 @@ https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/ga
 - `url`：填写完整 HTTPS 地址，如 `https://allowlist.example.com`。
 - `key`：后台创建的 `awl_` 开头 API Key。
 
-模块会让 API 域名直连，在 `network-changed` 事件和每 10 分钟定时任务中上报，并提供手动刷新面板。服务端会将出口 IPv4 转为 `/24`；同一网段重复上报不会占用新槽位。
+公共模板同样会在 `network-changed` 事件和每 3 分钟定时任务中上报，并提供手动刷新面板。服务端会将出口 IPv4 转为 `/24`；同一网段重复上报不会占用新槽位。
 
 ## 部署后管理
 

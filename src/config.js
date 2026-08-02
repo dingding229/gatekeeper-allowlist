@@ -24,6 +24,29 @@ const adminPathValue = (value) => {
   return path;
 };
 
+const publicBaseUrlValue = (env) => {
+  const raw =
+    env.PUBLIC_BASE_URL || (env.DOMAIN ? `https://${env.DOMAIN}` : "");
+  if (!raw) return "";
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("PUBLIC_BASE_URL must be a valid URL");
+  }
+  if (
+    !["https:", "http:"].includes(url.protocol) ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error("PUBLIC_BASE_URL must be an HTTP(S) origin without a path");
+  }
+  return url.origin;
+};
+
 export function loadConfig(env = process.env) {
   const config = {
     host: env.HOST || "127.0.0.1",
@@ -33,6 +56,7 @@ export function loadConfig(env = process.env) {
     adminUsername: env.ADMIN_USERNAME || "admin",
     adminPassword: env.ADMIN_PASSWORD || DEFAULT_PASSWORD,
     firewallSyncToken: env.FIREWALL_SYNC_TOKEN || "",
+    publicBaseUrl: publicBaseUrlValue(env),
     trustProxy: booleanValue(env.TRUST_PROXY),
     cookieSecure: booleanValue(env.COOKIE_SECURE),
     production: env.NODE_ENV === "production",
@@ -48,6 +72,12 @@ export function loadConfig(env = process.env) {
   }
   if (config.firewallSyncToken && config.firewallSyncToken.length < 24) {
     throw new Error("FIREWALL_SYNC_TOKEN must contain at least 24 characters");
+  }
+  if (config.production && !config.publicBaseUrl) {
+    throw new Error("DOMAIN or PUBLIC_BASE_URL is required in production");
+  }
+  if (config.production && !config.publicBaseUrl.startsWith("https://")) {
+    throw new Error("PUBLIC_BASE_URL must use HTTPS in production");
   }
 
   return config;

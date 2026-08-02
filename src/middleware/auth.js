@@ -1,6 +1,6 @@
-import { parseCookies, sha256 } from "../security.js";
+import { parseCookies, sha256, verifySurgeToken } from "../security.js";
 
-export function createAuthMiddleware({ repository }) {
+export function createAuthMiddleware({ repository, config }) {
   return {
     api(req, res, next) {
       const bearer = req.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -8,7 +8,10 @@ export function createAuthMiddleware({ repository }) {
       const apiKey = Array.isArray(rawKey) ? rawKey[0] : rawKey;
       if (!apiKey) return res.status(401).json({ error: "missing_api_key" });
 
-      const user = repository.findEnabledUserByApiKey(apiKey);
+      const surgeUserId = verifySurgeToken(apiKey, config.firewallSyncToken);
+      const user = surgeUserId
+        ? repository.findUserById(surgeUserId, true)
+        : repository.findEnabledUserByApiKey(apiKey);
       if (!user) return res.status(401).json({ error: "invalid_api_key" });
       req.user = user;
       next();
