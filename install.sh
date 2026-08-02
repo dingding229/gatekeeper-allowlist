@@ -45,6 +45,44 @@ confirm() {
   fi
 }
 
+configure_docker_mirror() {
+  local mirror daemon_file temp_file
+  mirror="$(prompt 'Docker Hub 镜像加速地址' 'https://docker.m.daocloud.io')"
+  [[ "$mirror" =~ ^https://[A-Za-z0-9._:-]+/?$ ]] || fail "镜像地址必须是有效的 HTTPS URL"
+
+  install -d -m 0755 /etc/docker
+  daemon_file="/etc/docker/daemon.json"
+  temp_file="$(mktemp /etc/docker/daemon.json.XXXXXX)"
+  if [[ -s "$daemon_file" ]]; then
+    jq -e . "$daemon_file" >/dev/null || fail "$daemon_file 不是有效 JSON，请先手动修复"
+    jq --arg mirror "${mirror%/}" \
+      '."registry-mirrors" = (((."registry-mirrors" // []) + [$mirror]) | unique)' \
+      "$daemon_file" >"$temp_file"
+  else
+    jq -n --arg mirror "${mirror%/}" '{"registry-mirrors": [$mirror]}' >"$temp_file"
+  fi
+  chmod 0644 "$temp_file"
+  mv "$temp_file" "$daemon_file"
+  systemctl restart docker
+  info "已配置 Docker 镜像加速：${mirror%/}"
+}
+
+ensure_docker_images() {
+  info "检测 Docker Hub 镜像拉取"
+  if timeout 60 docker pull caddy:2-alpine \
+    && timeout 60 docker pull node:24-alpine; then
+    return
+  fi
+
+  warn "Docker Hub 无法访问，可能是 DNS、IPv6 路由或网络限制"
+  warn "接下来可配置第三方镜像加速；生产使用前请自行评估镜像服务提供方"
+  configure_docker_mirror
+  timeout 180 docker pull caddy:2-alpine \
+    || fail "通过镜像源拉取 Caddy 仍然失败，请检查 DNS 和镜像地址"
+  timeout 180 docker pull node:24-alpine \
+    || fail "通过镜像源拉取 Node.js 仍然失败，请检查 DNS 和镜像地址"
+}
+
 [[ $EUID -eq 0 ]] || fail "请使用 root 运行：curl -fsSL https://raw.githubusercontent.com/$REPOSITORY/$BRANCH/install.sh | sudo bash"
 [[ -r /etc/os-release ]] || fail "无法识别操作系统"
 source /etc/os-release
@@ -105,8 +143,12 @@ INITIAL_USER="$(prompt '初始 API Key 名称' 'initial-device')"
 ENABLE_FIREWALL=0
 if confirm "是否立即启用 SSH IP 白名单保护？" y; then ENABLE_FIREWALL=1; fi
 
+if [[ -e "$INSTALL_DIR/.install-complete" ]]; then
+  fail "$INSTALL_DIR 已是完整部署。为保护数据，本脚本不会覆盖现有安装"
+fi
 if [[ -e "$INSTALL_DIR/.env" ]]; then
-  fail "$INSTALL_DIR 已存在部署。为保护数据，本脚本不会覆盖现有安装"
+  warn "检测到上次未完成的部署，将保留 Docker 数据卷并更新程序文件"
+  confirm "是否继续修复安装？" y || fail "已取消安装"
 fi
 
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
@@ -134,6 +176,7 @@ EOF
   DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 systemctl enable --now docker
+ensure_docker_images
 
 SOURCE_DIR=""
 SCRIPT_PATH="${BASH_SOURCE[0]:-}"
@@ -216,6 +259,8 @@ EOF
   systemctl start gatekeeper-sync.service
   systemctl enable --now gatekeeper-sync.timer
 fi
+
+touch "$INSTALL_DIR/.install-complete"
 
 printf '\n%s部署完成%s\n' "$green" "$reset"
 printf '后台地址: https://%s\n' "$DOMAIN"

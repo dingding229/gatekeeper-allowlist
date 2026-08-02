@@ -37,6 +37,8 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 5. 创建初始用户，把当前 SSH 来源 IP 加入白名单。
 6. 经确认后配置 nftables，并每分钟同步有效 IP。
 
+如果 Docker Hub 因 DNS、IPv6 或地区网络限制无法访问，脚本会在 SSH 中询问 Docker Hub 镜像加速地址，并安全合并现有 `/etc/docker/daemon.json`。默认建议值来自 [DaoCloud public-image-mirror](https://github.com/DaoCloud/public-image-mirror)。第三方镜像服务不由本项目运营，使用前请自行评估。
+
 > API Key 只在部署完成时显示一次，请立即保存。
 
 ## 使用 API
@@ -82,6 +84,10 @@ journalctl -u gatekeeper-sync.service -n 50 --no-pager
 ```
 
 数据保存在 Docker 命名卷中。不要执行 `docker compose down -v`，否则会删除数据库和 HTTPS 证书数据。
+
+### 上次部署中断
+
+直接重新执行一键部署命令即可。脚本通过 `/opt/gatekeeper/.install-complete` 区分完整安装和未完成安装；未完成安装会保留已有 Docker 数据卷并继续部署。
 
 ## 安全说明
 
