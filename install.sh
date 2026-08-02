@@ -248,11 +248,14 @@ if ((ENABLE_FIREWALL)); then
     INITIAL_IPV4="$INITIAL_NETWORK"
     INITIAL_IPV6=""
   fi
+  INITIAL_IPV4_ELEMENTS="${INITIAL_IPV4:+elements = { $INITIAL_IPV4 }}"
+  INITIAL_IPV6_ELEMENTS="${INITIAL_IPV6:+elements = { $INITIAL_IPV6 }}"
+  INITIAL_TCP_PORT_ELEMENTS="elements = { $SSH_PORT }"
   sed \
-    -e "s|__INITIAL_IPV4__|$INITIAL_IPV4|g" \
-    -e "s|__INITIAL_IPV6__|$INITIAL_IPV6|g" \
-    -e "s|__INITIAL_TCP_PORTS__|$SSH_PORT|g" \
-    -e "s|__INITIAL_UDP_PORTS__||g" \
+    -e "s|__INITIAL_IPV4_ELEMENTS__|$INITIAL_IPV4_ELEMENTS|g" \
+    -e "s|__INITIAL_IPV6_ELEMENTS__|$INITIAL_IPV6_ELEMENTS|g" \
+    -e "s|__INITIAL_TCP_PORT_ELEMENTS__|$INITIAL_TCP_PORT_ELEMENTS|g" \
+    -e "s|__INITIAL_UDP_PORT_ELEMENTS__||g" \
     deploy/nftables/gatekeeper.nft.template >"$CONFIG_DIR/gatekeeper.nft"
   nft -c -f "$CONFIG_DIR/gatekeeper.nft"
 

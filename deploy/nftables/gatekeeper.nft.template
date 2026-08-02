@@ -4,25 +4,25 @@ table inet gatekeeper {
   set allowed_v4 {
     type ipv4_addr
     flags interval
-    elements = { __INITIAL_IPV4__ }
+    __INITIAL_IPV4_ELEMENTS__
   }
 
   set allowed_v6 {
     type ipv6_addr
     flags interval
-    elements = { __INITIAL_IPV6__ }
+    __INITIAL_IPV6_ELEMENTS__
   }
 
   set protected_tcp_ports {
     type inet_service
     flags interval
-    elements = { __INITIAL_TCP_PORTS__ }
+    __INITIAL_TCP_PORT_ELEMENTS__
   }
 
   set protected_udp_ports {
     type inet_service
     flags interval
-    elements = { __INITIAL_UDP_PORTS__ }
+    __INITIAL_UDP_PORT_ELEMENTS__
   }
 
   chain input {

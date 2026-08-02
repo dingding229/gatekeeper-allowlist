@@ -159,12 +159,16 @@ if ((ENABLE_FIREWALL)); then
     fail "当前 SSH 网段 $CURRENT_NETWORK 不在白名单中。请先用 API Key 上报当前 IP，再重新运行更新脚本"
   fi
 
+  IPV4_ELEMENTS="${IPV4:+elements = { $IPV4 }}"
+  IPV6_ELEMENTS="${IPV6:+elements = { $IPV6 }}"
+  TCP_PORT_ELEMENTS="${TCP_ELEMENTS:+elements = { $TCP_ELEMENTS }}"
+  UDP_PORT_ELEMENTS="${UDP_ELEMENTS:+elements = { $UDP_ELEMENTS }}"
   install -d -m 0700 "$CONFIG_DIR"
   sed \
-    -e "s|__INITIAL_IPV4__|$IPV4|g" \
-    -e "s|__INITIAL_IPV6__|$IPV6|g" \
-    -e "s|__INITIAL_TCP_PORTS__|$TCP_ELEMENTS|g" \
-    -e "s|__INITIAL_UDP_PORTS__|$UDP_ELEMENTS|g" \
+    -e "s|__INITIAL_IPV4_ELEMENTS__|$IPV4_ELEMENTS|g" \
+    -e "s|__INITIAL_IPV6_ELEMENTS__|$IPV6_ELEMENTS|g" \
+    -e "s|__INITIAL_TCP_PORT_ELEMENTS__|$TCP_PORT_ELEMENTS|g" \
+    -e "s|__INITIAL_UDP_PORT_ELEMENTS__|$UDP_PORT_ELEMENTS|g" \
     deploy/nftables/gatekeeper.nft.template >"$CONFIG_DIR/gatekeeper.nft"
   nft -c -f "$CONFIG_DIR/gatekeeper.nft"
   if ((NEW_FIREWALL)); then
