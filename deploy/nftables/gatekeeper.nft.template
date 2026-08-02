@@ -36,4 +36,17 @@ table inet gatekeeper {
     udp dport @protected_udp_ports ip6 saddr @allowed_v6 accept
     udp dport @protected_udp_ports reject
   }
+
+  # Docker-published ports normally traverse the forward hook after DNAT.
+  # Match the original public port so mappings such as 8443:443 are protected.
+  chain forward {
+    type filter hook forward priority -5; policy accept;
+    ct state established,related accept
+    ct status dnat meta l4proto tcp ct original proto-dst @protected_tcp_ports ip saddr @allowed_v4 accept
+    ct status dnat meta l4proto tcp ct original proto-dst @protected_tcp_ports ip6 saddr @allowed_v6 accept
+    ct status dnat meta l4proto tcp ct original proto-dst @protected_tcp_ports reject
+    ct status dnat meta l4proto udp ct original proto-dst @protected_udp_ports ip saddr @allowed_v4 accept
+    ct status dnat meta l4proto udp ct original proto-dst @protected_udp_ports ip6 saddr @allowed_v6 accept
+    ct status dnat meta l4proto udp ct original proto-dst @protected_udp_ports reject
+  }
 }

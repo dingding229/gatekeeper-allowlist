@@ -35,12 +35,17 @@ try {
       udpPorts: parsePortRanges(udpValue),
     });
     process.stdout.write(`${JSON.stringify(settings)}\n`);
+  } else if (command === "normalize-network" && args.length === 1) {
+    const normalized = normalizeNetwork(args[0]);
+    if (!normalized) throw new Error("Invalid IP address");
+    process.stdout.write(`${JSON.stringify(normalized)}\n`);
   } else {
     throw new Error(
       [
         "Usage:",
         "  node src/cli.js bootstrap <user-name> <ip> <ssh-port>",
         '  node src/cli.js set-firewall <tcp-ranges> <udp-ranges> (use "" for none)',
+        "  node src/cli.js normalize-network <ip>",
       ].join("\n"),
     );
   }

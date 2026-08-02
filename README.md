@@ -60,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/update.sh | sudo bash
 ```
 
-更新脚本会保留数据库、API Key、`.env` 和 HTTPS 证书，并在 SSH 中询问后台路径、TCP 保护端口和 UDP 保护端口。端口支持逗号及范围，例如 `22,443,8000-9000`。
+更新脚本会保留数据库、API Key、`.env` 和 HTTPS 证书，并在 SSH 中询问后台路径、TCP 保护端口和 UDP 保护端口。端口支持逗号及范围，例如 `22,443,8000-9000`。如果旧安装没有启用 nftables，脚本会主动询问是否启用，并在加载规则前确认当前 SSH 网段已经在白名单中。
 
 ## 使用 API
 
@@ -132,7 +132,7 @@ journalctl -u gatekeeper-sync.service -n 50 --no-pager
 - 内部防火墙快照接口不会由 Caddy 对公网开放。
 - Docker 容器不具备修改宿主机防火墙的权限；nftables 同步由宿主机 systemd 任务完成。
 - 后台自定义路径用于减少无意义扫描，管理员密码和会话认证仍是主要安全边界；API 路径保持固定以支持客户端自动上报。
-- nftables 设置保护宿主机 `input` 链上的 TCP/UDP 端口。不要把 80/443 加入保护范围，否则未加白设备将无法调用 API 或打开后台。
+- nftables 设置同时保护宿主机 `input` 链和 Docker 发布端口经过的 `forward` 链。不要把 80/443 加入保护范围，否则未加白设备将无法调用 API 或打开后台。
 - Docker 官方文档提醒容器发布端口可能绕过部分主机防火墙规则；容器额外发布的端口应同时通过云安全组或 Docker 网络规则限制。
 - 启用白名单前，脚本会把当前 SSH 来源 IP 所属网段写入初始集合，但仍应保留控制台救援能力。
 

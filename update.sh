@@ -22,6 +22,17 @@ prompt() {
   printf '%s' "${value:-$default}"
 }
 
+confirm() {
+  local message="$1" default="${2:-y}" answer
+  if [[ "$default" == "y" ]]; then
+    read -r -p "$message [Y/n]: " answer <"$TTY"
+    [[ ! "${answer:-y}" =~ ^[Nn]$ ]]
+  else
+    read -r -p "$message [y/N]: " answer <"$TTY"
+    [[ "${answer:-n}" =~ ^[Yy]$ ]]
+  fi
+}
+
 env_value() {
   local key="$1"
   sed -n "s/^${key}=//p" "$INSTALL_DIR/.env" | tail -n 1
@@ -61,6 +72,18 @@ while true; do
   warn "路径只能包含 3-64 位字母、数字、下划线和连字符"
 done
 
+ENABLE_FIREWALL=0
+NEW_FIREWALL=0
+if [[ -f "$CONFIG_DIR/gatekeeper-sync.env" ]]; then
+  ENABLE_FIREWALL=1
+else
+  warn "当前未安装 Gatekeeper nftables 防火墙；后台端口设置不会自动产生拦截"
+  if confirm "是否现在启用网段白名单防火墙？" y; then
+    ENABLE_FIREWALL=1
+    NEW_FIREWALL=1
+  fi
+fi
+
 DETECTED_SSH_PORT="$(sshd -T 2>/dev/null | awk '$1 == "port" { print $2; exit }' || true)"
 while true; do
   TCP_PORTS="$(prompt '受白名单保护的 TCP 端口（逗号分隔，支持 8000-9000）' "${DETECTED_SSH_PORT:-22}")"
@@ -99,10 +122,16 @@ curl -fsS http://127.0.0.1:8787/health >/dev/null || {
 info "保存受保护端口范围"
 docker compose exec -T gatekeeper node src/cli.js set-firewall "$TCP_PORTS" "$UDP_PORTS" >/dev/null
 
-if [[ -f "$CONFIG_DIR/gatekeeper-sync.env" ]]; then
+if ((ENABLE_FIREWALL)); then
   info "升级 nftables 规则并同步网段与端口"
-  # shellcheck disable=SC1090
-  source "$CONFIG_DIR/gatekeeper-sync.env"
+  if ((NEW_FIREWALL)); then
+    FIREWALL_SYNC_TOKEN="$(env_value FIREWALL_SYNC_TOKEN)"
+    [[ ${#FIREWALL_SYNC_TOKEN} -ge 24 ]] || fail "现有 .env 缺少有效的 FIREWALL_SYNC_TOKEN"
+    ALLOWLIST_URL="http://127.0.0.1:8787"
+  else
+    # shellcheck disable=SC1090
+    source "$CONFIG_DIR/gatekeeper-sync.env"
+  fi
   SNAPSHOT="$(curl -fsS --max-time 10 \
     -H "Authorization: Bearer $FIREWALL_SYNC_TOKEN" \
     "${ALLOWLIST_URL:-http://127.0.0.1:8787}/api/internal/firewall-snapshot")"
@@ -110,6 +139,25 @@ if [[ -f "$CONFIG_DIR/gatekeeper-sync.env" ]]; then
   IPV6="$(printf '%s' "$SNAPSHOT" | jq -er '.ipv6 | join(", ")')"
   TCP_ELEMENTS="$(printf '%s' "$SNAPSHOT" | jq -er '.tcpPorts | join(", ")')"
   UDP_ELEMENTS="$(printf '%s' "$SNAPSHOT" | jq -er '.udpPorts | join(", ")')"
+
+  SSH_CONNECTION_VALUE="${SSH_CONNECTION:-}"
+  CURRENT_IP="${SSH_CONNECTION_VALUE%% *}"
+  while true; do
+    CURRENT_IP="$(prompt '当前 SSH 客户端 IP（启用防火墙前安全校验）' "$CURRENT_IP")"
+    python3 -c 'import ipaddress,sys; ipaddress.ip_address(sys.argv[1])' "$CURRENT_IP" 2>/dev/null && break
+    warn "IP 地址格式不正确"
+  done
+  CURRENT_NETWORK_JSON="$(docker compose exec -T gatekeeper node src/cli.js normalize-network "$CURRENT_IP")"
+  CURRENT_NETWORK="$(printf '%s' "$CURRENT_NETWORK_JSON" | jq -er .network)"
+  CURRENT_FAMILY="$(printf '%s' "$CURRENT_NETWORK_JSON" | jq -er .family)"
+  if [[ "$CURRENT_FAMILY" == "4" ]]; then
+    CURRENT_ALLOWED="$(printf '%s' "$SNAPSHOT" | jq -r --arg network "$CURRENT_NETWORK" '.ipv4 | index($network) != null')"
+  else
+    CURRENT_ALLOWED="$(printf '%s' "$SNAPSHOT" | jq -r --arg network "$CURRENT_NETWORK" '.ipv6 | index($network) != null')"
+  fi
+  if [[ "$CURRENT_ALLOWED" != "true" ]]; then
+    fail "当前 SSH 网段 $CURRENT_NETWORK 不在白名单中。请先用 API Key 上报当前 IP，再重新运行更新脚本"
+  fi
 
   install -d -m 0700 "$CONFIG_DIR"
   sed \
@@ -119,11 +167,19 @@ if [[ -f "$CONFIG_DIR/gatekeeper-sync.env" ]]; then
     -e "s|__INITIAL_UDP_PORTS__|$UDP_ELEMENTS|g" \
     deploy/nftables/gatekeeper.nft.template >"$CONFIG_DIR/gatekeeper.nft"
   nft -c -f "$CONFIG_DIR/gatekeeper.nft"
+  if ((NEW_FIREWALL)); then
+    cat >"$CONFIG_DIR/gatekeeper-sync.env" <<EOF
+ALLOWLIST_URL=http://127.0.0.1:8787
+FIREWALL_SYNC_TOKEN=$FIREWALL_SYNC_TOKEN
+NFT_TABLE=gatekeeper
+EOF
+    chmod 600 "$CONFIG_DIR/gatekeeper-sync.env"
+  fi
   install -m 0644 deploy/systemd/gatekeeper-firewall.service /etc/systemd/system/
   install -m 0644 deploy/systemd/gatekeeper-sync.service /etc/systemd/system/
   install -m 0644 deploy/systemd/gatekeeper-sync.timer /etc/systemd/system/
   systemctl daemon-reload
-  systemctl restart gatekeeper-firewall.service
+  systemctl enable --now gatekeeper-firewall.service
   systemctl start gatekeeper-sync.service
   systemctl enable --now gatekeeper-sync.timer
 fi
@@ -133,3 +189,6 @@ printf '\n%s更新完成%s\n' "$green" "$reset"
 printf '后台地址: https://%s/%s/\n' "$DOMAIN" "$ADMIN_PATH"
 printf 'TCP 保护端口: %s\n' "$TCP_PORTS"
 printf 'UDP 保护端口: %s\n' "${UDP_PORTS:-无}"
+if ((!ENABLE_FIREWALL)); then
+  warn "nftables 防火墙仍未启用，以上端口设置暂时不会拦截流量"
+fi
