@@ -21,3 +21,14 @@ test("device rows use the same table format as network rows", () => {
   assert.match(styles, /\.ip-table\s*\{[^}]*table-layout:\s*fixed/s);
   assert.match(styles, /\.device-id\s*\{[^}]*overflow-wrap:\s*anywhere/s);
 });
+
+test("network and device sections both expose current usage headings", () => {
+  assert.match(
+    renderSource,
+    /已放行网段（\$\{ips\.length\}\/\$\{user\.ip_limit\}）/,
+  );
+  assert.match(
+    renderSource,
+    /已识别设备（\$\{devices\.length\}\/\$\{user\.device_limit\}）/,
+  );
+});

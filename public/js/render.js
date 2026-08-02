@@ -107,6 +107,7 @@ function renderUser(user, allIps, allDevices) {
         <button class="chevron" data-expand aria-label="展开用户详情">⌄</button>
       </div>
       <div class="ip-details hidden">
+        <h3>已放行网段（${ips.length}/${user.ip_limit}）</h3>
         <table class="ip-table"><tbody>${renderIpRows(ips)}</tbody></table>
         <h3>已识别设备（${devices.length}/${user.device_limit}）</h3>
         ${renderDevices(devices, user.id)}
