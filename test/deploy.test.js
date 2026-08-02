@@ -37,6 +37,22 @@ const installer = readFileSync(
   "utf8",
 );
 const updater = readFileSync(new URL("../update.sh", import.meta.url), "utf8");
+const syncScript = readFileSync(
+  new URL("../scripts/sync-nftables.sh", import.meta.url),
+  "utf8",
+);
+const backupScript = readFileSync(
+  new URL("../scripts/backup.sh", import.meta.url),
+  "utf8",
+);
+const restoreScript = readFileSync(
+  new URL("../scripts/restore.sh", import.meta.url),
+  "utf8",
+);
+const backupTimer = readFileSync(
+  new URL("../deploy/systemd/gatekeeper-backup.timer", import.meta.url),
+  "utf8",
+);
 
 test("nftables policy covers host input and Docker forwarded ports", () => {
   assert.match(template, /hook input/);
@@ -87,6 +103,17 @@ test("systemd sync service requires the firewall and supports custom paths", () 
   assert.match(watcher, /sync-nftables\.sh/);
   assert.match(installer, /enable --now gatekeeper-sync-listener\.service/);
   assert.match(updater, /enable --now gatekeeper-sync-listener\.service/);
+  assert.match(syncScript, /api\/internal\/firewall-status/);
+});
+
+test("deployment installs validated off-volume backups and restore tooling", () => {
+  assert.match(backupScript, /VACUUM INTO/);
+  assert.match(backupScript, /PRAGMA quick_check/);
+  assert.match(backupScript, /\/var\/backups\/gatekeeper/);
+  assert.match(restoreScript, /sqlite3 .*PRAGMA quick_check/);
+  assert.match(backupTimer, /OnCalendar=/);
+  assert.match(installer, /gatekeeper-backup\.timer/);
+  assert.match(updater, /gatekeeper-backup\.timer/);
 });
 
 test("nftables installer validates then atomically writes the config", (t) => {

@@ -20,6 +20,9 @@ const actionNames = {
   "permanent.removed": "移除永久放行",
   "global_network.added": "添加全局网段",
   "global_network.removed": "移除全局网段",
+  "device.removed": "移除设备",
+  "surge.rotated": "撤销 Surge 模块",
+  "settings.retention": "更新数据保留策略",
 };
 
 const locationText = (ip) =>
@@ -53,7 +56,7 @@ function renderIpRows(ips) {
     .join("");
 }
 
-function renderDevices(devices) {
+function renderDevices(devices, userId) {
   if (!devices.length) return '<div class="empty">尚未识别到设备</div>';
   return `<div class="audit-list">${devices
     .map(
@@ -61,6 +64,7 @@ function renderDevices(devices) {
         <strong>${escapeHtml(device.name)}</strong>
         <small>${escapeHtml(device.source)} · ${escapeHtml(device.last_ip || "IP 未知")} · ID ${escapeHtml(device.device_key.slice(0, 16))}…</small>
         <time>${formatTime(device.last_seen_at)}</time>
+        <button class="danger-link" data-remove-device="${device.id}" data-device-user="${userId}">移除</button>
       </div>`,
     )
     .join("")}</div>`;
@@ -95,8 +99,8 @@ function renderUser(user, allIps, allDevices) {
       </div>
       <div class="ip-details hidden">
         <table class="ip-table"><tbody>${renderIpRows(ips)}</tbody></table>
-        <h3>已识别设备</h3>
-        ${renderDevices(devices)}
+        <h3>已识别设备（${devices.length}/${user.device_limit}）</h3>
+        ${renderDevices(devices, user.id)}
         <div class="row-actions">
           <label class="limit-control">网段配额
             <input type="number" min="1" max="100" value="${user.ip_limit}" data-limit-input="${user.id}">
@@ -107,6 +111,7 @@ function renderUser(user, allIps, allDevices) {
           </button>
           <button class="ghost" data-rotate="${user.id}">轮换 API Key</button>
           <button class="ghost" data-surge="${user.id}">Surge 安装地址</button>
+          <button class="ghost" data-rotate-surge="${user.id}">撤销旧 Surge 地址</button>
           <button class="ghost" data-history="${user.id}">历史 IP</button>
           <button class="danger-outline" data-clear-ips="${user.id}">清空网段</button>
           <button class="danger-outline" data-delete-user="${user.id}">删除用户</button>
@@ -137,6 +142,25 @@ export function renderDashboard(state, query = "") {
     state.applicationSettings?.apiRateLimitSeconds || 60;
   document.querySelector("#adminUsername").value =
     state.applicationSettings?.adminUsername || "admin";
+  document.querySelector("#historyRetentionDays").value =
+    state.retentionSettings?.historyDays || 180;
+  document.querySelector("#auditRetentionDays").value =
+    state.retentionSettings?.auditDays || 365;
+  document.querySelector("#deviceRetentionDays").value =
+    state.retentionSettings?.deviceDays || 90;
+  const firewallAlert = document.querySelector("#firewallAlert");
+  const firewall = state.firewallStatus;
+  const firewallHealthy =
+    firewall?.success &&
+    !firewall.stale &&
+    firewall.applied_revision === state.firewallRevision;
+  firewallAlert.classList.remove("hidden");
+  firewallAlert.classList.toggle("ok", Boolean(firewallHealthy));
+  firewallAlert.textContent = firewallHealthy
+    ? `防火墙已同步 · revision ${firewall.applied_revision} · IPv4 ${firewall.ipv4_count} / IPv6 ${firewall.ipv6_count}`
+    : firewall?.stale
+      ? "警告：超过 150 秒未收到宿主机防火墙同步状态，请检查 gatekeeper-sync 服务"
+      : `警告：防火墙尚未同步到最新版本（应用 ${firewall?.applied_revision ?? 0} / 需要 ${state.firewallRevision ?? 0}）`;
   document.querySelector("#whitelistUser").innerHTML = state.users.length
     ? state.users
         .filter((user) => user.enabled)

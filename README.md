@@ -13,6 +13,9 @@
 - 后台可修改管理员账号和密码，不限制密码最短位数；密码使用 scrypt 加盐哈希保存，修改后所有后台会话立即失效。
 - 后台仅在安装时生成的自定义路径开放，直接访问域名根路径返回 404。
 - 后台为每个用户生成独立的 Surge 一键安装地址。
+- 宿主机回传 nftables 已应用 revision、集合数量和最后成功时间；后台对超时或未同步状态显示红色警告。
+- 每日执行 SQLite 在线备份、`quick_check` 校验和过期数据清理；备份保存到宿主机 `/var/backups/gatekeeper`。
+- 每个用户最多登记 20 台设备，可在后台移除设备；Surge 模块地址可按用户单独撤销。
 - Surge 上报周期可在安装模块时配置，网络切换时也会触发，并提供独立的手动刷新面板。
 - Caddy 自动 HTTPS、SQLite 持久化、nftables 变更后即时同步，并保留每分钟兜底同步。
 
@@ -66,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/update.sh | sudo bash
 ```
 
-更新脚本会保留数据库、API Key、历史 IP、`.env` 和 HTTPS 证书，并自动迁移数据库。默认保留已有 TCP/UDP 保护范围。端口支持逗号及范围，例如 `22,443,8000-9000`；输入 `none` 可清空。如果旧安装没有启用 nftables，脚本会主动询问是否启用，并在加载规则前确认当前 SSH 网段已经在白名单中。脚本使用临时文件生成并检查规则，检查通过后才会原子替换正式配置，最后强制验证 systemd、即时同步服务、兜底定时器和 nftables 规则表。
+更新脚本会保留数据库、API Key、历史 IP、`.env` 和 HTTPS 证书，并自动迁移数据库。每次更新前后都会生成经完整性校验的宿主机数据库备份。默认保留已有 TCP/UDP 保护范围。端口支持逗号及范围，例如 `22,443,8000-9000`；输入 `none` 可清空。如果旧安装没有启用 nftables，脚本会主动询问是否启用，并在加载规则前确认当前 SSH 网段已经在白名单中。脚本使用临时文件生成并检查规则，检查通过后才会原子替换正式配置，最后强制验证 systemd、即时同步服务、兜底定时器和 nftables 规则表。
 
 ## 使用 API
 
@@ -162,9 +165,18 @@ journalctl -u gatekeeper-sync.service -n 50 --no-pager
 
 # 一键诊断防火墙、同步接口和当前端口范围
 sudo /opt/gatekeeper/scripts/firewall-doctor.sh
+
+# 立即创建一份经校验的宿主机备份
+sudo /opt/gatekeeper/scripts/backup.sh
+
+# 查看每日备份定时器
+systemctl status gatekeeper-backup.timer
+
+# 从备份恢复（会先自动备份当前数据）
+sudo /opt/gatekeeper/scripts/restore.sh /var/backups/gatekeeper/gatekeeper-YYYYMMDDTHHMMSSZ.db.gz
 ```
 
-数据保存在 Docker 命名卷中。不要执行 `docker compose down -v`，否则会删除数据库和 HTTPS 证书数据。
+数据库保存在 Docker 命名卷中，默认每日备份到宿主机 `/var/backups/gatekeeper` 并保留 30 天。不要执行 `docker compose down -v`，否则会删除数据库和 HTTPS 证书数据。
 
 ### 上次部署中断
 

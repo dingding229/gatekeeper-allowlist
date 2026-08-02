@@ -99,7 +99,7 @@ printf '\nGatekeeper Debian 12 一键部署\n\n'
 
 info "安装基础依赖"
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gnupg jq nftables openssl python3 tar util-linux
+DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl gzip gnupg jq nftables openssl python3 sqlite3 tar util-linux
 
 while true; do
   DOMAIN="$(prompt '访问域名（需提前解析到本机）')"
@@ -209,8 +209,12 @@ fi
 [[ -x "$SOURCE_DIR/scripts/render-nftables.sh" \
   && -x "$SOURCE_DIR/scripts/install-nftables-config.sh" \
   && -x "$SOURCE_DIR/scripts/watch-firewall.sh" \
+  && -f "$SOURCE_DIR/scripts/backup.sh" \
+  && -f "$SOURCE_DIR/scripts/restore.sh" \
+  && -f "$SOURCE_DIR/deploy/systemd/gatekeeper-backup.service" \
+  && -f "$SOURCE_DIR/deploy/systemd/gatekeeper-backup.timer" \
   && -f "$SOURCE_DIR/deploy/systemd/gatekeeper-sync-listener.service" ]] \
-  || fail "源码缺少防火墙安装脚本"
+  || fail "源码缺少部署或备份脚本"
 
 info "安装到 $INSTALL_DIR"
 install -d -m 0755 "$INSTALL_DIR"
@@ -291,6 +295,16 @@ EOF
   nft list table inet gatekeeper >/dev/null || fail "nftables 规则表未加载"
   scripts/firewall-doctor.sh || fail "防火墙自检失败"
 fi
+
+sed "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
+  deploy/systemd/gatekeeper-backup.service \
+  > /etc/systemd/system/gatekeeper-backup.service
+chmod 0644 /etc/systemd/system/gatekeeper-backup.service
+install -m 0644 deploy/systemd/gatekeeper-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now gatekeeper-backup.timer
+systemctl is-active --quiet gatekeeper-backup.timer || fail "备份定时器未运行"
+scripts/backup.sh >/dev/null
 
 touch "$INSTALL_DIR/.install-complete"
 

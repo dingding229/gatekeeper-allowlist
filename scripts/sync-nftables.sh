@@ -55,4 +55,19 @@ trap 'rm -f "$tmpfile"' EXIT INT TERM
 
 nft -c -f "$tmpfile"
 nft -f "$tmpfile"
+
+status_payload="$(printf '%s' "$snapshot" | jq -c '{
+  revision: .revision,
+  success: true,
+  ipv4Count: (.ipv4 | length),
+  ipv6Count: (.ipv6 | length),
+  tcpPortCount: (.tcpPorts | length),
+  udpPortCount: (.udpPorts | length)
+}')"
+curl --fail --silent --show-error --max-time 5 \
+  -X POST -H "Authorization: Bearer ${FIREWALL_SYNC_TOKEN}" \
+  -H "Content-Type: application/json" \
+  --data "$status_payload" \
+  "${ALLOWLIST_URL}/api/internal/firewall-status" >/dev/null \
+  || echo "warning: firewall applied but status heartbeat failed" >&2
 echo "Gatekeeper firewall sets synchronized"

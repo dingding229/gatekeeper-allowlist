@@ -8,10 +8,14 @@ export function createAuthMiddleware({ repository, config }) {
       const apiKey = Array.isArray(rawKey) ? rawKey[0] : rawKey;
       if (!apiKey) return res.status(401).json({ error: "missing_api_key" });
 
-      const surgeUserId = verifySurgeToken(apiKey, config.firewallSyncToken);
-      const user = surgeUserId
-        ? repository.findUserById(surgeUserId, true)
-        : repository.findEnabledUserByApiKey(apiKey);
+      const surgeToken = verifySurgeToken(apiKey, config.firewallSyncToken);
+      const surgeUser = surgeToken
+        ? repository.findUserById(surgeToken.userId, true)
+        : null;
+      const user =
+        surgeUser && surgeUser.surge_version === surgeToken.version
+          ? surgeUser
+          : repository.findEnabledUserByApiKey(apiKey);
       if (!user) return res.status(401).json({ error: "invalid_api_key" });
       const suppliedDeviceKey =
         req.get("x-gatekeeper-device-id") || req.body?.deviceId;
@@ -31,13 +35,23 @@ export function createAuthMiddleware({ repository, config }) {
         String(req.body?.source || "api")
           .trim()
           .slice(0, 32) || "api";
-      repository.touchUserDevice(
-        user.id,
-        deviceKey,
-        deviceName,
-        req.ip,
-        source,
-      );
+      try {
+        repository.touchUserDevice(
+          user.id,
+          deviceKey,
+          deviceName,
+          req.ip,
+          source,
+        );
+      } catch (error) {
+        if (error.code === "DEVICE_LIMIT_EXCEEDED") {
+          return res.status(409).json({
+            error: "device_limit_exceeded",
+            limit: error.limit,
+          });
+        }
+        throw error;
+      }
       const rate = repository.consumeApiRequest(
         user.id,
         Date.now(),

@@ -54,6 +54,12 @@
           <button id="newUserBtn" class="primary">＋ 创建用户</button>
         </div>
 
+        <div
+          id="firewallAlert"
+          class="firewall-alert hidden"
+          role="alert"
+        ></div>
+
         <div class="stats">
           <article>
             <span>用户总数</span><strong id="statUsers">—</strong
@@ -213,6 +219,38 @@
               POST、GET 和 Surge 上报共用此限制，保存后立即生效。
             </p>
             <button class="primary" type="submit">保存 API 频率</button>
+          </form>
+          <form id="retentionForm" class="settings-form">
+            <h3>数据保留与自动清理</h3>
+            <label
+              >历史 IP 保留天数<input
+                id="historyRetentionDays"
+                type="number"
+                min="7"
+                max="3650"
+                required
+            /></label>
+            <label
+              >审计记录保留天数<input
+                id="auditRetentionDays"
+                type="number"
+                min="7"
+                max="3650"
+                required
+            /></label>
+            <label
+              >离线设备保留天数<input
+                id="deviceRetentionDays"
+                type="number"
+                min="7"
+                max="3650"
+                required
+            /></label>
+            <p class="muted">
+              每日备份完成后自动清理过期数据。备份默认保存在宿主机
+              /var/backups/gatekeeper。
+            </p>
+            <button class="primary" type="submit">保存保留策略</button>
           </form>
           <form id="adminCredentialsForm" class="settings-form">
             <h3>后台登录账号</h3>

@@ -150,6 +150,24 @@ $("#apiRateForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("#retentionForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const result = await apiRequest("/api/admin/settings/retention", {
+      method: "PATCH",
+      body: JSON.stringify({
+        historyDays: Number($("#historyRetentionDays").value),
+        auditDays: Number($("#auditRetentionDays").value),
+        deviceDays: Number($("#deviceRetentionDays").value),
+      }),
+    });
+    state.retentionSettings = result.retentionSettings;
+    showToast("数据保留策略已保存");
+  } catch {
+    showToast("保留天数必须在 7 到 3650 之间");
+  }
+});
+
 $("#adminCredentialsForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const newPassword = $("#newAdminPassword").value;
@@ -201,6 +219,20 @@ $("#userList").addEventListener("click", async (event) => {
   }
 
   try {
+    const removeDeviceButton = event.target.closest("[data-remove-device]");
+    if (
+      removeDeviceButton &&
+      window.confirm("确定移除这台设备记录和限频状态？")
+    ) {
+      await apiRequest(
+        `/api/admin/users/${removeDeviceButton.dataset.deviceUser}/devices/${removeDeviceButton.dataset.removeDevice}`,
+        { method: "DELETE" },
+      );
+      showToast("设备已移除；再次上报时会重新登记");
+      await loadDashboard();
+      return;
+    }
+
     const removeButton = event.target.closest("[data-delete-ip]");
     if (removeButton && window.confirm("确定移除这个网段？")) {
       await apiRequest(`/api/admin/ips/${removeButton.dataset.deleteIp}`, {
@@ -305,6 +337,20 @@ $("#userList").addEventListener("click", async (event) => {
         `/api/admin/users/${surgeButton.dataset.surge}/surge-module`,
       );
       showSurgeModule(result);
+      return;
+    }
+
+    const rotateSurgeButton = event.target.closest("[data-rotate-surge]");
+    if (
+      rotateSurgeButton &&
+      window.confirm("所有使用旧地址安装的 Surge 模块将立即失效，确定继续？")
+    ) {
+      const result = await apiRequest(
+        `/api/admin/users/${rotateSurgeButton.dataset.rotateSurge}/rotate-surge-token`,
+        { method: "POST" },
+      );
+      showSurgeModule(result);
+      showToast("旧 Surge 地址已撤销，请安装新地址");
     }
   } catch {
     showToast("操作失败，请刷新后重试");

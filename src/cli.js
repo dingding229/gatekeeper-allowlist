@@ -40,6 +40,10 @@ try {
     const normalized = normalizeNetwork(args[0]);
     if (!normalized) throw new Error("Invalid IP address");
     process.stdout.write(`${JSON.stringify(normalized)}\n`);
+  } else if (command === "cleanup" && args.length === 0) {
+    process.stdout.write(
+      `${JSON.stringify(repository.cleanupRetainedData())}\n`,
+    );
   } else {
     throw new Error(
       [
@@ -47,6 +51,7 @@ try {
         "  node src/cli.js bootstrap <user-name> <ip> <ssh-port>",
         '  node src/cli.js set-firewall <tcp-ranges> <udp-ranges> (use "" for none)',
         "  node src/cli.js normalize-network <ip>",
+        "  node src/cli.js cleanup",
       ].join("\n"),
     );
   }

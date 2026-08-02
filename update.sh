@@ -103,6 +103,10 @@ docker compose version >/dev/null 2>&1 || fail "未安装 Docker Compose 插件"
 command -v nft >/dev/null 2>&1 || fail "未安装 nftables"
 command -v jq >/dev/null 2>&1 || fail "未安装 jq"
 command -v python3 >/dev/null 2>&1 || fail "未安装 python3"
+if ! command -v sqlite3 >/dev/null 2>&1 || ! command -v gzip >/dev/null 2>&1; then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y gzip sqlite3
+fi
 if ! command -v flock >/dev/null 2>&1; then
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y util-linux
@@ -182,9 +186,17 @@ curl --retry 3 --retry-delay 2 -fsSL "https://github.com/$REPOSITORY/archive/ref
   && -x "$TEMP_DIR/scripts/install-nftables-config.sh" \
   && -x "$TEMP_DIR/scripts/firewall-doctor.sh" \
   && -x "$TEMP_DIR/scripts/watch-firewall.sh" \
+  && -f "$TEMP_DIR/scripts/backup.sh" \
+  && -f "$TEMP_DIR/scripts/restore.sh" \
+  && -f "$TEMP_DIR/deploy/systemd/gatekeeper-backup.service" \
+  && -f "$TEMP_DIR/deploy/systemd/gatekeeper-backup.timer" \
   && -f "$TEMP_DIR/deploy/systemd/gatekeeper-sync-listener.service" \
   && -f "$TEMP_DIR/deploy/nftables/gatekeeper.nft.template" ]] \
   || fail "下载的源码不完整"
+
+info "创建更新前数据库备份"
+chmod 755 "$TEMP_DIR/scripts/backup.sh"
+GATEKEEPER_INSTALL_DIR="$INSTALL_DIR" "$TEMP_DIR/scripts/backup.sh" >/dev/null
 
 info "更新程序文件（保留数据库、证书和 .env）"
 cp -a "$TEMP_DIR/." "$INSTALL_DIR/"
@@ -285,6 +297,17 @@ EOF
   nft list table inet gatekeeper >/dev/null || fail "nftables 规则表未加载"
   scripts/firewall-doctor.sh || fail "防火墙自检失败"
 fi
+
+sed "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
+  deploy/systemd/gatekeeper-backup.service \
+  > /etc/systemd/system/gatekeeper-backup.service
+chmod 0644 /etc/systemd/system/gatekeeper-backup.service
+install -m 0644 deploy/systemd/gatekeeper-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now gatekeeper-backup.timer
+systemctl is-active --quiet gatekeeper-backup.timer || fail "备份定时器未运行"
+info "创建更新后数据库备份"
+scripts/backup.sh >/dev/null
 
 DOMAIN="$(env_value DOMAIN)"
 printf '\n%b更新完成%b\n' "$green" "$reset"

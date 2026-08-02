@@ -13,6 +13,8 @@ const schema = `
     key_prefix TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     ip_limit INTEGER NOT NULL DEFAULT 3 CHECK (ip_limit BETWEEN 1 AND 100),
+    device_limit INTEGER NOT NULL DEFAULT 20 CHECK (device_limit BETWEEN 1 AND 100),
+    surge_version INTEGER NOT NULL DEFAULT 1 CHECK (surge_version >= 1),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -132,10 +134,28 @@ const schema = `
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
+  CREATE TABLE IF NOT EXISTS firewall_status (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    applied_revision INTEGER NOT NULL DEFAULT 0,
+    success INTEGER NOT NULL DEFAULT 0,
+    ipv4_count INTEGER NOT NULL DEFAULT 0,
+    ipv6_count INTEGER NOT NULL DEFAULT 0,
+    tcp_port_count INTEGER NOT NULL DEFAULT 0,
+    udp_port_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    applied_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
   INSERT OR IGNORE INTO settings (key, value) VALUES
     ('protected_tcp_ports', '["22"]'),
     ('protected_udp_ports', '[]'),
+    ('history_retention_days', '180'),
+    ('audit_retention_days', '365'),
+    ('device_retention_days', '90'),
     ('firewall_revision', '0');
+
+  INSERT OR IGNORE INTO firewall_status (id) VALUES (1);
 `;
 
 function ensureColumn(db, table, column, definition) {
@@ -203,6 +223,8 @@ export function openDatabase(filename) {
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec(schema);
   ensureColumn(db, "users", "ip_limit", "INTEGER NOT NULL DEFAULT 3");
+  ensureColumn(db, "users", "device_limit", "INTEGER NOT NULL DEFAULT 20");
+  ensureColumn(db, "users", "surge_version", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "ip_history", "geo_source", "TEXT");
   migrateNetworks(db);
   return db;

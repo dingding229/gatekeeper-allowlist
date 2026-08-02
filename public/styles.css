@@ -102,6 +102,22 @@ select:focus {
   border-color: var(--green2);
   box-shadow: 0 0 0 3px rgba(36, 148, 106, 0.12);
 }
+
+.firewall-alert {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid #ef4444;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 650;
+}
+
+.firewall-alert.ok {
+  border-color: #22c55e;
+  background: #f0fdf4;
+  color: #166534;
+}
 button {
   border: 0;
   font: inherit;

@@ -25,6 +25,34 @@ const validId = (value) => {
 export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
   const router = Router();
   const loginAttempts = new Map();
+  const surgeModuleLinks = (user) => {
+    const token = createSurgeToken(
+      user.id,
+      config.firewallSyncToken,
+      user.surge_version,
+    );
+    const moduleUrl = `${config.publicBaseUrl}/api/v1/surge/${encodeURIComponent(token)}/module.sgmodule`;
+    return {
+      ok: true,
+      user: user.name,
+      moduleUrl,
+      installUrl: `surge:///install-module?url=${encodeURIComponent(moduleUrl)}`,
+    };
+  };
+
+  router.use((req, res, next) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+    const origin = req.get("origin");
+    if (!origin || !config.publicBaseUrl) return next();
+    try {
+      if (new URL(origin).origin !== new URL(config.publicBaseUrl).origin) {
+        return res.status(403).json({ error: "invalid_request_origin" });
+      }
+    } catch {
+      return res.status(403).json({ error: "invalid_request_origin" });
+    }
+    return next();
+  });
 
   router.post("/login", (req, res) => {
     const now = Date.now();
@@ -109,6 +137,25 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
     return res.json({
       ok: true,
       apiRateLimitSeconds: repository.setApiRateLimitSeconds(seconds),
+    });
+  });
+
+  router.patch("/settings/retention", adminAuth, (req, res) => {
+    const values = {
+      historyDays: Number(req.body?.historyDays),
+      auditDays: Number(req.body?.auditDays),
+      deviceDays: Number(req.body?.deviceDays),
+    };
+    if (
+      Object.values(values).some(
+        (value) => !Number.isInteger(value) || value < 7 || value > 3650,
+      )
+    ) {
+      return res.status(400).json({ error: "invalid_retention_days" });
+    }
+    return res.json({
+      ok: true,
+      retentionSettings: repository.setRetentionSettings(values),
     });
   });
 
@@ -393,14 +440,32 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
     if (!config.publicBaseUrl || !config.firewallSyncToken) {
       return res.status(503).json({ error: "surge_module_unavailable" });
     }
-    const token = createSurgeToken(user.id, config.firewallSyncToken);
-    const moduleUrl = `${config.publicBaseUrl}/api/v1/surge/${encodeURIComponent(token)}/module.sgmodule`;
-    return res.json({
-      ok: true,
-      user: user.name,
-      moduleUrl,
-      installUrl: `surge:///install-module?url=${encodeURIComponent(moduleUrl)}`,
-    });
+    return res.json(surgeModuleLinks(user));
+  });
+
+  router.post("/users/:id/rotate-surge-token", adminAuth, (req, res) => {
+    const userId = validId(req.params.id);
+    if (!userId) return res.status(400).json({ error: "invalid_user_id" });
+    if (!config.publicBaseUrl || !config.firewallSyncToken) {
+      return res.status(503).json({ error: "surge_module_unavailable" });
+    }
+    if (!repository.rotateSurgeToken(userId)) {
+      return res.status(404).json({ error: "user_not_found" });
+    }
+    const user = repository.findUserById(userId);
+    return res.json(surgeModuleLinks(user));
+  });
+
+  router.delete("/users/:userId/devices/:deviceId", adminAuth, (req, res) => {
+    const userId = validId(req.params.userId);
+    const deviceId = validId(req.params.deviceId);
+    if (!userId || !deviceId) {
+      return res.status(400).json({ error: "invalid_device_id" });
+    }
+    if (!repository.removeUserDevice(userId, deviceId)) {
+      return res.status(404).json({ error: "device_not_found" });
+    }
+    return res.json({ ok: true });
   });
 
   router.delete("/ips/:id", adminAuth, (req, res) => {

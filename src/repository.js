@@ -134,7 +134,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
     findEnabledUserByApiKey(apiKey) {
       return db
         .prepare(
-          "SELECT id, name, enabled, ip_limit FROM users WHERE key_hash = ? AND enabled = 1",
+          `SELECT id, name, enabled, ip_limit, device_limit, surge_version
+           FROM users WHERE key_hash = ? AND enabled = 1`,
         )
         .get(sha256(apiKey));
     },
@@ -142,7 +143,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
     findUserById(userId, enabledOnly = false) {
       return db
         .prepare(
-          `SELECT id, name, enabled, ip_limit FROM users WHERE id = ?${enabledOnly ? " AND enabled = 1" : ""}`,
+          `SELECT id, name, enabled, ip_limit, device_limit, surge_version
+           FROM users WHERE id = ?${enabledOnly ? " AND enabled = 1" : ""}`,
         )
         .get(userId);
     },
@@ -316,13 +318,32 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
     },
 
     touchUserDevice(userId, deviceKey, name, ip, source = "api") {
+      const existing = db
+        .prepare(
+          "SELECT id FROM user_devices WHERE user_id = ? AND device_key = ?",
+        )
+        .get(userId, deviceKey);
+      if (!existing) {
+        const capacity = db
+          .prepare(
+            `SELECT u.device_limit AS device_limit, count(d.id) AS device_count
+             FROM users u LEFT JOIN user_devices d ON d.user_id = u.id
+             WHERE u.id = ? GROUP BY u.id`,
+          )
+          .get(userId);
+        if (!capacity || capacity.device_count >= capacity.device_limit) {
+          const error = new Error("Device limit exceeded");
+          error.code = "DEVICE_LIMIT_EXCEEDED";
+          error.limit = capacity?.device_limit || 0;
+          throw error;
+        }
+      }
       db.prepare(
         `INSERT INTO user_devices
          (user_id, device_key, name, source, last_ip)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(user_id, device_key) DO UPDATE SET
-           name = excluded.name,
-           source = excluded.source,
+           name = excluded.name, source = excluded.source,
            last_ip = excluded.last_ip,
            last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
       ).run(userId, deviceKey, name, source, ip || null);
@@ -337,6 +358,21 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
            ORDER BY last_seen_at DESC, id DESC`,
         )
         .all(userId);
+    },
+
+    removeUserDevice(userId, deviceId) {
+      const device = db
+        .prepare(
+          "SELECT device_key FROM user_devices WHERE id = ? AND user_id = ?",
+        )
+        .get(deviceId, userId);
+      if (!device) return false;
+      db.prepare(
+        "DELETE FROM api_device_rate_limits WHERE user_id = ? AND device_key = ?",
+      ).run(userId, device.device_key);
+      db.prepare("DELETE FROM user_devices WHERE id = ?").run(deviceId);
+      insertAudit.run(userId, "device.removed", null, device.device_key);
+      return true;
     },
 
     consumeApiRequest(
@@ -389,7 +425,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
     getOverview() {
       const users = db
         .prepare(
-          `SELECT u.id, u.name, u.key_prefix, u.enabled, u.ip_limit, u.created_at,
+          `SELECT u.id, u.name, u.key_prefix, u.enabled, u.ip_limit,
+                  u.device_limit, u.surge_version, u.created_at,
                   count(w.id) AS ip_count, max(w.last_seen_at) AS last_seen_at
            FROM users u LEFT JOIN whitelist_ips w ON w.user_id = u.id
            GROUP BY u.id ORDER BY u.id DESC`,
@@ -424,7 +461,10 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         permanentWhitelist: this.listPermanentWhitelist(),
         globalWhitelist: this.listGlobalWhitelist(),
         devices,
+        firewallStatus: this.getFirewallStatus(),
+        firewallRevision: this.getFirewallRevision(),
         settings: this.getFirewallSettings(),
+        retentionSettings: this.getRetentionSettings(),
         applicationSettings: {
           apiRateLimitSeconds: this.getApiRateLimitWindowMs() / 1000,
           adminUsername: this.getAdminUsername(),
@@ -554,6 +594,122 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       );
       insertAudit.run(userId, "key.rotated", null, null);
       return apiKey;
+    },
+
+    rotateSurgeToken(userId) {
+      const result = db
+        .prepare(
+          "UPDATE users SET surge_version = surge_version + 1 WHERE id = ?",
+        )
+        .run(userId);
+      if (!result.changes) return null;
+      const version = db
+        .prepare("SELECT surge_version FROM users WHERE id = ?")
+        .get(userId).surge_version;
+      insertAudit.run(userId, "surge.rotated", null, String(version));
+      return version;
+    },
+
+    getFirewallStatus() {
+      const status = db
+        .prepare("SELECT * FROM firewall_status WHERE id = 1")
+        .get();
+      const updatedAt = Date.parse(status?.updated_at || "");
+      return {
+        ...status,
+        success: Boolean(status?.success),
+        stale: !Number.isFinite(updatedAt) || Date.now() - updatedAt > 150_000,
+      };
+    },
+
+    reportFirewallStatus({
+      revision,
+      success,
+      ipv4Count = 0,
+      ipv6Count = 0,
+      tcpPortCount = 0,
+      udpPortCount = 0,
+      error = null,
+    }) {
+      db.prepare(
+        `UPDATE firewall_status SET applied_revision = ?, success = ?,
+         ipv4_count = ?, ipv6_count = ?, tcp_port_count = ?, udp_port_count = ?,
+         error = ?, applied_at = CASE WHEN ? THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE applied_at END,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = 1`,
+      ).run(
+        revision,
+        success ? 1 : 0,
+        ipv4Count,
+        ipv6Count,
+        tcpPortCount,
+        udpPortCount,
+        error ? String(error).slice(0, 500) : null,
+        success ? 1 : 0,
+      );
+      return this.getFirewallStatus();
+    },
+
+    getRetentionSettings() {
+      const rows = db
+        .prepare(
+          `SELECT key, value FROM settings WHERE key IN
+           ('history_retention_days','audit_retention_days','device_retention_days')`,
+        )
+        .all();
+      const values = Object.fromEntries(
+        rows.map((row) => [row.key, Number(row.value)]),
+      );
+      return {
+        historyDays: values.history_retention_days || 180,
+        auditDays: values.audit_retention_days || 365,
+        deviceDays: values.device_retention_days || 90,
+      };
+    },
+
+    setRetentionSettings({ historyDays, auditDays, deviceDays }) {
+      const update = db.prepare(
+        `INSERT INTO settings (key, value, updated_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+         updated_at = excluded.updated_at`,
+      );
+      update.run("history_retention_days", String(historyDays));
+      update.run("audit_retention_days", String(auditDays));
+      update.run("device_retention_days", String(deviceDays));
+      insertAudit.run(
+        null,
+        "settings.retention",
+        null,
+        `${historyDays}/${auditDays}/${deviceDays}`,
+      );
+      return this.getRetentionSettings();
+    },
+
+    cleanupRetainedData() {
+      const settings = this.getRetentionSettings();
+      const cutoff = (days) =>
+        new Date(Date.now() - days * 86_400_000).toISOString();
+      const oldDevices = db
+        .prepare(
+          "SELECT user_id, device_key FROM user_devices WHERE last_seen_at < ?",
+        )
+        .all(cutoff(settings.deviceDays));
+      for (const device of oldDevices) {
+        db.prepare(
+          "DELETE FROM api_device_rate_limits WHERE user_id = ? AND device_key = ?",
+        ).run(device.user_id, device.device_key);
+      }
+      const devices = db
+        .prepare("DELETE FROM user_devices WHERE last_seen_at < ?")
+        .run(cutoff(settings.deviceDays)).changes;
+      const history = db
+        .prepare("DELETE FROM ip_history WHERE created_at < ?")
+        .run(cutoff(settings.historyDays)).changes;
+      const audit = db
+        .prepare("DELETE FROM audit_log WHERE created_at < ?")
+        .run(cutoff(settings.auditDays)).changes;
+      db.exec("PRAGMA optimize");
+      return { history, audit, devices };
     },
 
     removeIp(ipId) {

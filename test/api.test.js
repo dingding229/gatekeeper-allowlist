@@ -267,6 +267,26 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   });
   assert.equal(addResponse.status, 201);
 
+  const rotated = await (
+    await fetch(`${baseUrl}/api/admin/users/${user.id}/rotate-surge-token`, {
+      method: "POST",
+      headers: { Cookie: cookie },
+    })
+  ).json();
+  const rotatedUrl = new URL(rotated.moduleUrl);
+  assert.notEqual(rotated.moduleUrl, links.moduleUrl);
+  assert.equal((await fetch(`${baseUrl}${moduleUrl.pathname}`)).status, 404);
+  assert.equal((await fetch(`${baseUrl}${rotatedUrl.pathname}`)).status, 200);
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/api/v1/whitelist`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${surgeToken}` },
+      })
+    ).status,
+    401,
+  );
+
   repository.setUserEnabled(user.id, false);
   assert.equal((await fetch(`${baseUrl}${moduleUrl.pathname}`)).status, 404);
   assert.equal(
@@ -278,6 +298,66 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
     ).status,
     401,
   );
+});
+
+test("firewall heartbeat and retention settings appear in admin overview", async (t) => {
+  const { baseUrl } = await startTestApp(t);
+  const heartbeat = await fetch(`${baseUrl}/api/internal/firewall-status`, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer test-firewall-token-with-24-chars",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      revision: 0,
+      success: true,
+      ipv4Count: 2,
+      ipv6Count: 1,
+      tcpPortCount: 1,
+      udpPortCount: 0,
+    }),
+  });
+  assert.equal(heartbeat.status, 200);
+
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const retention = await fetch(`${baseUrl}/api/admin/settings/retention`, {
+    method: "PATCH",
+    headers: { Cookie: cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ historyDays: 30, auditDays: 90, deviceDays: 14 }),
+  });
+  assert.equal(retention.status, 200);
+
+  const overview = await (
+    await fetch(`${baseUrl}/api/admin/overview`, {
+      headers: { Cookie: cookie },
+    })
+  ).json();
+  assert.equal(overview.firewallStatus.success, true);
+  assert.equal(overview.firewallStatus.ipv4_count, 2);
+  assert.deepEqual(overview.retentionSettings, {
+    historyDays: 30,
+    auditDays: 90,
+    deviceDays: 14,
+  });
+});
+
+test("admin rejects a cross-origin state-changing request", async (t) => {
+  const { baseUrl } = await startTestApp(t);
+  const response = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "https://attacker.example",
+    },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "invalid_request_origin");
 });
 
 test("client API is limited to one request per user per minute", async (t) => {

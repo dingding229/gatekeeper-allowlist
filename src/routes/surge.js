@@ -6,9 +6,15 @@ export function createSurgeRouter({ repository, config }) {
   const router = Router();
 
   router.get("/:token/module.sgmodule", (req, res) => {
-    const userId = verifySurgeToken(req.params.token, config.firewallSyncToken);
-    const user = userId ? repository.findUserById(userId, true) : null;
+    const decoded = verifySurgeToken(
+      req.params.token,
+      config.firewallSyncToken,
+    );
+    const user = decoded ? repository.findUserById(decoded.userId, true) : null;
     if (!user || !config.publicBaseUrl) {
+      return res.status(404).type("text/plain").send("Module not found");
+    }
+    if (user.surge_version !== decoded.version) {
       return res.status(404).type("text/plain").send("Module not found");
     }
     res.set("Cache-Control", "no-store");

@@ -61,6 +61,40 @@ test("users own independent three-slot allowlists", () => {
   db.close();
 });
 
+test("device registration is bounded and removed devices can register again", () => {
+  const { db, repository } = setup();
+  const user = repository.createUser("device-cap");
+  for (let index = 0; index < 20; index += 1) {
+    repository.touchUserDevice(
+      user.id,
+      `device_${index}`,
+      `Device ${index}`,
+      "203.0.113.8",
+    );
+  }
+  assert.throws(
+    () =>
+      repository.touchUserDevice(
+        user.id,
+        "device_overflow",
+        "Overflow",
+        "203.0.113.8",
+      ),
+    (error) => error.code === "DEVICE_LIMIT_EXCEEDED" && error.limit === 20,
+  );
+  const [device] = repository.listUserDevices(user.id);
+  assert.equal(repository.removeUserDevice(user.id, device.id), true);
+  assert.doesNotThrow(() =>
+    repository.touchUserDevice(
+      user.id,
+      "device_replacement",
+      "Replacement",
+      "203.0.113.8",
+    ),
+  );
+  db.close();
+});
+
 test("per-user limits evict old networks while history is preserved", () => {
   const { db, repository } = setup();
   const user = repository.createUser("custom-limit");

@@ -107,6 +107,7 @@ GET /health
 | 401 | `invalid_api_key` | Key 错误、已轮换或用户已停用 |
 | 403 | `network_blacklisted` | 该 IP 所属网段已被管理员拉黑 |
 | 400 | `invalid_device_id` | 设备 ID 格式无效 |
+| 409 | `device_limit_exceeded` | 该用户已达到 20 台已登记设备上限，需在后台移除旧设备 |
 | 429 | `rate_limit_exceeded` | 该用户的该设备在最短间隔内已访问客户端 API |
 | 500 | `internal_error` | 服务端异常 |
 

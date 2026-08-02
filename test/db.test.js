@@ -44,6 +44,18 @@ test("legacy databases gain user quotas and history without data loss", (t) => {
     .get();
   assert.equal(user.ip_limit, 3);
   assert.equal(
+    migrated
+      .prepare("SELECT device_limit FROM users WHERE name = 'legacy-user'")
+      .get().device_limit,
+    20,
+  );
+  assert.equal(
+    migrated
+      .prepare("SELECT surge_version FROM users WHERE name = 'legacy-user'")
+      .get().surge_version,
+    1,
+  );
+  assert.equal(
     migrated.prepare("SELECT ip FROM whitelist_ips WHERE user_id = 1").get().ip,
     "8.8.8.0/24",
   );
@@ -58,6 +70,9 @@ test("legacy databases gain user quotas and history without data loss", (t) => {
   );
   assert.doesNotThrow(() =>
     migrated.prepare("SELECT count(*) FROM global_whitelist_networks").get(),
+  );
+  assert.doesNotThrow(() =>
+    migrated.prepare("SELECT count(*) FROM firewall_status").get(),
   );
   assert.equal(
     migrated

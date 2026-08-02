@@ -37,8 +37,9 @@ export function verifyPassword(password, encoded) {
   return safeEqual(actual, match[2]);
 }
 
-export function createSurgeToken(userId, secret) {
-  const payload = Buffer.from(String(userId)).toString("base64url");
+export function createSurgeToken(userId, secret, version = 1) {
+  const value = version === 1 ? String(userId) : `${userId}:${version}`;
+  const payload = Buffer.from(value).toString("base64url");
   const signature = createHmac("sha256", secret)
     .update(`gatekeeper-surge:${payload}`)
     .digest("base64url");
@@ -51,14 +52,24 @@ export function verifySurgeToken(token, secret) {
   );
   if (!match || !secret) return null;
   let userId;
+  let version;
   try {
-    userId = Number(Buffer.from(match[1], "base64url").toString("utf8"));
+    const decoded = Buffer.from(match[1], "base64url").toString("utf8");
+    const parts = decoded.split(":");
+    userId = Number(parts[0]);
+    version = parts.length === 1 ? 1 : Number(parts[1]);
   } catch {
     return null;
   }
-  if (!Number.isSafeInteger(userId) || userId < 1) return null;
-  const expected = createSurgeToken(userId, secret);
-  return safeEqual(token, expected) ? userId : null;
+  if (
+    !Number.isSafeInteger(userId) ||
+    userId < 1 ||
+    !Number.isSafeInteger(version) ||
+    version < 1
+  )
+    return null;
+  const expected = createSurgeToken(userId, secret, version);
+  return safeEqual(token, expected) ? { userId, version } : null;
 }
 
 export function normalizeIp(value) {
