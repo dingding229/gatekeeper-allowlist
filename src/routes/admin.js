@@ -5,6 +5,7 @@ import {
   SESSION_TTL_MS,
 } from "../constants.js";
 import { createSessionToken, safeEqual, sha256 } from "../security.js";
+import { parsePortRanges } from "../ports.js";
 
 const SESSION_COOKIE = "allowlist_session";
 
@@ -68,6 +69,22 @@ export function createAdminRouter({ repository, adminAuth, config }) {
 
   router.get("/overview", adminAuth, (_req, res) => {
     res.json(repository.getOverview());
+  });
+
+  router.patch("/settings/firewall", adminAuth, (req, res) => {
+    try {
+      const tcpPorts = parsePortRanges(req.body?.tcpPorts);
+      const udpPorts = parsePortRanges(req.body?.udpPorts);
+      return res.json({
+        ok: true,
+        settings: repository.setFirewallSettings({ tcpPorts, udpPorts }),
+      });
+    } catch (error) {
+      return res.status(400).json({
+        error: "invalid_port_ranges",
+        message: error.message,
+      });
+    }
   });
 
   router.post("/users", adminAuth, (req, res, next) => {

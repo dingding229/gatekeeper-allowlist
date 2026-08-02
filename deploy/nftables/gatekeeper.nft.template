@@ -1,7 +1,5 @@
 #!/usr/sbin/nft -f
 
-define SSH_PORT = __SSH_PORT__
-
 table inet gatekeeper {
   set allowed_v4 {
     type ipv4_addr
@@ -15,12 +13,27 @@ table inet gatekeeper {
     elements = { __INITIAL_IPV6__ }
   }
 
+  set protected_tcp_ports {
+    type inet_service
+    flags interval
+    elements = { __INITIAL_TCP_PORTS__ }
+  }
+
+  set protected_udp_ports {
+    type inet_service
+    flags interval
+    elements = { __INITIAL_UDP_PORTS__ }
+  }
+
   chain input {
     type filter hook input priority -5; policy accept;
     ct state established,related accept
     iifname "lo" accept
-    tcp dport $SSH_PORT ip saddr @allowed_v4 accept
-    tcp dport $SSH_PORT ip6 saddr @allowed_v6 accept
-    tcp dport $SSH_PORT reject
+    tcp dport @protected_tcp_ports ip saddr @allowed_v4 accept
+    tcp dport @protected_tcp_ports ip6 saddr @allowed_v6 accept
+    tcp dport @protected_tcp_ports reject
+    udp dport @protected_udp_ports ip saddr @allowed_v4 accept
+    udp dport @protected_udp_ports ip6 saddr @allowed_v6 accept
+    udp dport @protected_udp_ports reject
   }
 }

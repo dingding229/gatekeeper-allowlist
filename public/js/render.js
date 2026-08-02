@@ -4,15 +4,16 @@ const actionNames = {
   "user.created": "创建用户",
   "user.status": "用户状态",
   "key.rotated": "轮换密钥",
-  "ip.added": "添加 IP",
-  "ip.seen": "IP 再次上报",
+  "ip.added": "添加网段",
+  "ip.seen": "网段再次上报",
   "ip.evicted": "自动淘汰",
   "ip.removed": "手动移除",
+  "settings.updated": "更新端口设置",
 };
 
 function renderIpRows(ips) {
   if (!ips.length)
-    return '<tr><td colspan="4"><small>尚未添加 IP</small></td></tr>';
+    return '<tr><td colspan="4"><small>尚未添加网段</small></td></tr>';
 
   return ips
     .map(
@@ -50,7 +51,7 @@ function renderUser(user, allIps) {
           <span class="avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</span>
           <div>
             <strong>${escapeHtml(user.name)}</strong>
-            <small>${user.ip_count}/3 个 IP 槽位</small>
+            <small>${user.ip_count}/3 个网段槽位</small>
           </div>
         </div>
         <div class="key-prefix">Key&nbsp; <code>${escapeHtml(user.key_prefix)}••••••</code></div>
@@ -77,6 +78,12 @@ export function renderDashboard(state, query = "") {
   document.querySelector("#statUsers").textContent = state.stats.users;
   document.querySelector("#statActive").textContent = state.stats.activeUsers;
   document.querySelector("#statIps").textContent = state.stats.ips;
+  document.querySelector("#tcpPorts").value = (
+    state.settings?.tcpPorts || []
+  ).join(", ");
+  document.querySelector("#udpPorts").value = (
+    state.settings?.udpPorts || []
+  ).join(", ");
 
   const normalizedQuery = query.trim().toLowerCase();
   const users = state.users.filter((user) => {

@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { normalizeNetwork } from "./security.js";
 
 const schema = `
   PRAGMA foreign_keys = ON;
@@ -41,7 +42,66 @@ const schema = `
     token_hash TEXT PRIMARY KEY,
     expires_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
+  INSERT OR IGNORE INTO settings (key, value) VALUES
+    ('protected_tcp_ports', '["22"]'),
+    ('protected_udp_ports', '[]');
 `;
+
+function migrateNetworks(db) {
+  const rows = db
+    .prepare(
+      `SELECT id, user_id, ip, family, source, created_at, last_seen_at
+       FROM whitelist_ips ORDER BY user_id, created_at, id`,
+    )
+    .all();
+  const groups = new Map();
+  for (const row of rows) {
+    const normalized = normalizeNetwork(row.ip);
+    if (!normalized) continue;
+    const key = `${row.user_id}:${normalized.network}`;
+    const group = groups.get(key) || {
+      network: normalized.network,
+      family: normalized.family,
+      rows: [],
+    };
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const group of groups.values()) {
+      const [keeper, ...duplicates] = group.rows;
+      for (const duplicate of duplicates) {
+        db.prepare("DELETE FROM whitelist_ips WHERE id = ?").run(duplicate.id);
+      }
+      const latest = group.rows.reduce((best, row) =>
+        row.last_seen_at > best.last_seen_at ? row : best,
+      );
+      db.prepare(
+        `UPDATE whitelist_ips
+         SET ip = ?, family = ?, source = ?, last_seen_at = ? WHERE id = ?`,
+      ).run(
+        group.network,
+        group.family,
+        latest.source,
+        latest.last_seen_at,
+        keeper.id,
+      );
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
 
 export function openDatabase(filename) {
   if (filename !== ":memory:")
@@ -51,5 +111,6 @@ export function openDatabase(filename) {
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec(schema);
+  migrateNetworks(db);
   return db;
 }

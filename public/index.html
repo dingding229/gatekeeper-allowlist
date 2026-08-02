@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Gatekeeper · IP 白名单</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <title>Gatekeeper · 网段白名单</title>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="shell">
@@ -47,7 +47,7 @@
           <div>
             <p class="eyebrow">OVERVIEW</p>
             <h1>访问白名单</h1>
-            <p class="muted">每个 API Key 保留最近添加的 3 个 IP</p>
+            <p class="muted">每个 API Key 保留最近添加的 3 个网段</p>
           </div>
           <button id="newUserBtn" class="primary">＋ 创建用户</button>
         </div>
@@ -62,18 +62,19 @@
             ><small>当前可调用 API</small>
           </article>
           <article>
-            <span>生效 IP</span><strong id="statIps">—</strong
+            <span>生效网段</span><strong id="statIps">—</strong
             ><small>跨全部用户</small>
           </article>
           <article class="capacity">
-            <span>单用户容量</span><strong>3 <em>IP</em></strong
+            <span>单用户容量</span><strong>3 <em>网段</em></strong
             ><small>先进先出自动轮换</small>
           </article>
         </div>
 
         <nav class="tabs">
-          <button class="active" data-tab="users">用户与 IP</button
+          <button class="active" data-tab="users">用户与网段</button
           ><button data-tab="audit">操作记录</button
+          ><button data-tab="settings">端口设置</button
           ><button data-tab="api">API 使用</button>
         </nav>
 
@@ -86,7 +87,7 @@
             <input
               id="searchInput"
               class="search"
-              placeholder="搜索用户或 IP…"
+              placeholder="搜索用户或网段…"
             />
           </div>
           <div id="userList" class="user-list"></div>
@@ -102,11 +103,37 @@
           <div id="auditList" class="audit-list"></div>
         </section>
 
+        <section id="settingsTab" class="panel tab-content hidden">
+          <div class="panel-head">
+            <div>
+              <h2>受限端口范围</h2>
+              <p>只有白名单网段能够访问以下宿主机端口</p>
+            </div>
+          </div>
+          <form id="firewallForm" class="settings-form">
+            <label
+              >TCP 端口或范围
+              <input id="tcpPorts" placeholder="例如：22, 3306, 8000-9000" />
+            </label>
+            <label
+              >UDP 端口或范围
+              <input
+                id="udpPorts"
+                placeholder="例如：53, 5000-5100；留空表示不限制"
+              />
+            </label>
+            <p class="muted">
+              多个端口使用逗号分隔。保存后最多约 1 分钟同步到 nftables。
+            </p>
+            <button class="primary" type="submit">保存端口设置</button>
+          </form>
+        </section>
+
         <section id="apiTab" class="panel tab-content hidden">
           <div class="panel-head">
             <div>
               <h2>API 使用</h2>
-              <p>客户端可自动上报当前出口 IP，也可指定 IP</p>
+              <p>客户端可上报当前出口 IP，服务端自动转换为网段</p>
             </div>
           </div>
           <div class="docs">
@@ -119,7 +146,7 @@
               不传 <code>ip</code> 时自动使用请求的来源地址。指定地址时传入
               <code>{"ip":"203.0.113.8"}</code>。
             </p>
-            <h3>查询当前 Key 的 IP</h3>
+            <h3>查询当前 Key 的网段</h3>
             <pre><code>curl https://你的域名/api/v1/whitelist \
   -H "X-API-Key: awl_你的密钥"</code></pre>
           </div>
@@ -160,6 +187,6 @@
       </div>
     </dialog>
     <div id="toast" class="toast"></div>
-    <script src="/js/app.js" type="module"></script>
+    <script src="./js/app.js" type="module"></script>
   </body>
 </html>

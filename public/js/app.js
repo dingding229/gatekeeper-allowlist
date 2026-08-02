@@ -2,7 +2,7 @@ import { apiRequest } from "./api.js";
 import { renderDashboard } from "./render.js";
 
 const $ = (selector) => document.querySelector(selector);
-let state = { users: [], ips: [], audit: [], stats: {} };
+let state = { users: [], ips: [], audit: [], settings: {}, stats: {} };
 
 function showToast(message) {
   const toast = $("#toast");
@@ -94,6 +94,28 @@ $("#searchInput").addEventListener("input", (event) => {
   renderDashboard(state, event.target.value);
 });
 
+$("#firewallForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const result = await apiRequest("/api/admin/settings/firewall", {
+      method: "PATCH",
+      body: JSON.stringify({
+        tcpPorts: $("#tcpPorts").value,
+        udpPorts: $("#udpPorts").value,
+      }),
+    });
+    state.settings = result.settings;
+    renderDashboard(state, $("#searchInput").value);
+    showToast("端口设置已保存，等待防火墙同步");
+  } catch (error) {
+    showToast(
+      error.message === "invalid_port_ranges"
+        ? "端口范围格式不正确"
+        : "保存失败",
+    );
+  }
+});
+
 document.querySelector(".tabs").addEventListener("click", (event) => {
   const tab = event.target.dataset.tab;
   if (!tab) return;
@@ -119,11 +141,11 @@ $("#userList").addEventListener("click", async (event) => {
 
   try {
     const removeButton = event.target.closest("[data-delete-ip]");
-    if (removeButton && window.confirm("确定移除这个 IP？")) {
+    if (removeButton && window.confirm("确定移除这个网段？")) {
       await apiRequest(`/api/admin/ips/${removeButton.dataset.deleteIp}`, {
         method: "DELETE",
       });
-      showToast("IP 已移除");
+      showToast("网段已移除");
       await loadDashboard();
       return;
     }

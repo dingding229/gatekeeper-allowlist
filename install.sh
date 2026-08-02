@@ -113,6 +113,14 @@ while true; do
   warn "账号只能包含字母、数字、点、下划线和连字符"
 done
 
+DEFAULT_ADMIN_PATH="manage-$(openssl rand -hex 4)"
+while true; do
+  ADMIN_PATH="$(prompt '后台访问路径' "$DEFAULT_ADMIN_PATH")"
+  ADMIN_PATH="${ADMIN_PATH#/}"
+  [[ "$ADMIN_PATH" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$ ]] && break
+  warn "路径只能包含 3-64 位字母、数字、下划线和连字符"
+done
+
 while true; do
   ADMIN_PASSWORD="$(prompt_secret '后台管理员密码（至少 12 位）')"
   ADMIN_PASSWORD_CONFIRM="$(prompt_secret '再次输入管理员密码')"
@@ -206,6 +214,7 @@ DOMAIN=$DOMAIN
 ACME_EMAIL=$ACME_EMAIL
 ADMIN_USERNAME=$ADMIN_USERNAME
 ADMIN_PASSWORD=$ADMIN_PASSWORD
+ADMIN_PATH=/$ADMIN_PATH
 FIREWALL_SYNC_TOKEN=$FIREWALL_SYNC_TOKEN
 TRUST_PROXY=1
 COOKIE_SECURE=1
@@ -225,23 +234,25 @@ curl -fsS http://127.0.0.1:8787/health >/dev/null || {
 }
 
 info "创建初始用户和白名单"
-BOOTSTRAP_JSON="$(docker compose exec -T gatekeeper node src/cli.js bootstrap "$INITIAL_USER" "$INITIAL_IP")"
+BOOTSTRAP_JSON="$(docker compose exec -T gatekeeper node src/cli.js bootstrap "$INITIAL_USER" "$INITIAL_IP" "$SSH_PORT")"
 INITIAL_API_KEY="$(printf '%s' "$BOOTSTRAP_JSON" | jq -er .apiKey)"
+INITIAL_NETWORK="$(printf '%s' "$BOOTSTRAP_JSON" | jq -er .ip)"
 
 if ((ENABLE_FIREWALL)); then
   info "配置 nftables SSH 白名单"
   install -d -m 0700 "$CONFIG_DIR"
-  if [[ "$INITIAL_IP" == *:* ]]; then
+  if [[ "$INITIAL_NETWORK" == *:* ]]; then
     INITIAL_IPV4=""
-    INITIAL_IPV6="$INITIAL_IP"
+    INITIAL_IPV6="$INITIAL_NETWORK"
   else
-    INITIAL_IPV4="$INITIAL_IP"
+    INITIAL_IPV4="$INITIAL_NETWORK"
     INITIAL_IPV6=""
   fi
   sed \
-    -e "s|__SSH_PORT__|$SSH_PORT|g" \
     -e "s|__INITIAL_IPV4__|$INITIAL_IPV4|g" \
     -e "s|__INITIAL_IPV6__|$INITIAL_IPV6|g" \
+    -e "s|__INITIAL_TCP_PORTS__|$SSH_PORT|g" \
+    -e "s|__INITIAL_UDP_PORTS__||g" \
     deploy/nftables/gatekeeper.nft.template >"$CONFIG_DIR/gatekeeper.nft"
   nft -c -f "$CONFIG_DIR/gatekeeper.nft"
 
@@ -263,13 +274,13 @@ fi
 touch "$INSTALL_DIR/.install-complete"
 
 printf '\n%s部署完成%s\n' "$green" "$reset"
-printf '后台地址: https://%s\n' "$DOMAIN"
+printf '后台地址: https://%s/%s/\n' "$DOMAIN" "$ADMIN_PATH"
 printf '管理员账号: %s\n' "$ADMIN_USERNAME"
 printf '初始用户: %s\n' "$INITIAL_USER"
 printf '初始 API Key（仅显示这一次）: %s\n' "$INITIAL_API_KEY"
 printf '\n请立即保存 API Key。证书签发需要域名已正确解析并开放 80/443 端口。\n'
 if ((ENABLE_FIREWALL)); then
-  printf 'SSH 白名单已启用，初始允许地址: %s，端口: %s\n' "$INITIAL_IP" "$SSH_PORT"
+  printf 'SSH 白名单已启用，初始允许网段: %s，端口: %s\n' "$INITIAL_NETWORK" "$SSH_PORT"
 else
   printf 'SSH 白名单未启用，可继续使用后台和 API。\n'
 fi

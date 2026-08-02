@@ -424,6 +424,16 @@ header {
 .docs p {
   color: var(--muted);
 }
+.settings-form {
+  max-width: 720px;
+  padding: 24px;
+}
+.settings-form label:first-child {
+  margin-top: 0;
+}
+.settings-form .primary {
+  margin-top: 8px;
+}
 dialog {
   padding: 0;
   border: 0;

@@ -12,11 +12,24 @@ const integerValue = (value, fallback, name) => {
   return parsed;
 };
 
+const adminPathValue = (value) => {
+  const path = `/${String(value || "manage").replace(/^\/+|\/+$/g, "")}`;
+  if (!/^\/[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(path)) {
+    throw new Error(
+      "ADMIN_PATH must contain 3-64 letters, numbers, underscores, or hyphens",
+    );
+  }
+  if (["/api", "/health"].includes(path))
+    throw new Error("ADMIN_PATH is reserved");
+  return path;
+};
+
 export function loadConfig(env = process.env) {
   const config = {
     host: env.HOST || "127.0.0.1",
     port: integerValue(env.PORT, 8787, "PORT"),
     databasePath: resolve(env.DATABASE_PATH || "./data/allowlist.db"),
+    adminPath: adminPathValue(env.ADMIN_PATH),
     adminUsername: env.ADMIN_USERNAME || "admin",
     adminPassword: env.ADMIN_PASSWORD || DEFAULT_PASSWORD,
     firewallSyncToken: env.FIREWALL_SYNC_TOKEN || "",

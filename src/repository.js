@@ -158,12 +158,53 @@ export function createRepository(db) {
         users,
         ips,
         audit,
+        settings: this.getFirewallSettings(),
         stats: {
           users: users.length,
           activeUsers: users.filter((user) => user.enabled).length,
           ips: ips.length,
         },
       };
+    },
+
+    getFirewallSettings() {
+      const rows = db
+        .prepare(
+          "SELECT key, value FROM settings WHERE key IN ('protected_tcp_ports', 'protected_udp_ports')",
+        )
+        .all();
+      const values = Object.fromEntries(
+        rows.map((row) => [row.key, JSON.parse(row.value)]),
+      );
+      return {
+        tcpPorts: values.protected_tcp_ports || [],
+        udpPorts: values.protected_udp_ports || [],
+      };
+    },
+
+    setFirewallSettings({ tcpPorts, udpPorts }) {
+      const update = db.prepare(`
+        INSERT INTO settings (key, value, updated_at)
+        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        ON CONFLICT(key) DO UPDATE
+        SET value = excluded.value, updated_at = excluded.updated_at
+      `);
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        update.run("protected_tcp_ports", JSON.stringify(tcpPorts));
+        update.run("protected_udp_ports", JSON.stringify(udpPorts));
+        insertAudit.run(
+          null,
+          "settings.updated",
+          null,
+          `tcp=${tcpPorts.join(",")}; udp=${udpPorts.join(",")}`,
+        );
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+      return this.getFirewallSettings();
     },
 
     setUserEnabled(userId, enabled) {
@@ -213,10 +254,13 @@ export function createRepository(db) {
       `,
         )
         .all();
+      const settings = this.getFirewallSettings();
       return {
         generatedAt: new Date().toISOString(),
         ipv4: rows.filter((row) => row.family === 4).map((row) => row.ip),
         ipv6: rows.filter((row) => row.family === 6).map((row) => row.ip),
+        tcpPorts: settings.tcpPorts,
+        udpPorts: settings.udpPorts,
       };
     },
   };

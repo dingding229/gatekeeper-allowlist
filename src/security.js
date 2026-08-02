@@ -24,6 +24,37 @@ export function normalizeIp(value) {
   return ip;
 }
 
+function ipv6Network64(ip) {
+  const parts = ip.split("::");
+  const left = parts[0] ? parts[0].split(":") : [];
+  const right = parts[1] ? parts[1].split(":") : [];
+  const missing = 8 - left.length - right.length;
+  const expanded =
+    parts.length === 2
+      ? [...left, ...Array(missing).fill("0"), ...right]
+      : left;
+  const network = [...expanded.slice(0, 4), "0", "0", "0", "0"].join(":");
+  return `${new URL(`http://[${network}]/`).hostname.slice(1, -1)}/64`;
+}
+
+export function normalizeNetwork(value) {
+  const address = String(value || "").split("/")[0];
+  const ip = normalizeIp(address);
+  const family = isIP(ip);
+  if (family === 4) {
+    const octets = ip.split(".");
+    return {
+      network: `${octets[0]}.${octets[1]}.${octets[2]}.0/24`,
+      family,
+      prefixLength: 24,
+    };
+  }
+  if (family === 6) {
+    return { network: ipv6Network64(ip), family, prefixLength: 64 };
+  }
+  return null;
+}
+
 export function parseCookies(header = "") {
   return Object.fromEntries(
     header.split(";").flatMap((part) => {

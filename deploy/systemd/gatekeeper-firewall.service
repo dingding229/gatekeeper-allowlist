@@ -1,5 +1,5 @@
 [Unit]
-Description=Load Gatekeeper nftables SSH policy
+Description=Load Gatekeeper nftables allowlist policy
 After=network-online.target
 Wants=network-online.target
 Before=gatekeeper-sync.service

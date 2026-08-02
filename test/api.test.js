@@ -10,6 +10,7 @@ const config = {
   firewallSyncToken: "test-firewall-token-with-24-chars",
   trustProxy: false,
   cookieSecure: false,
+  adminPath: "/manage-test",
 };
 
 async function startTestApp(t) {
@@ -37,7 +38,7 @@ test("empty API body uses the request source IP", async (t) => {
 
   assert.equal(response.status, 201);
   const body = await response.json();
-  assert.equal(body.ip, "127.0.0.1");
+  assert.equal(body.ip, "127.0.0.0/24");
   assert.equal(body.limit, 3);
 });
 
@@ -61,6 +62,26 @@ test("API normalizes equivalent IPv6 addresses", async (t) => {
   assert.equal(repository.listUserIps(user.id).length, 1);
 });
 
+test("IPv4 addresses in the same /24 share one slot", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const user = repository.createUser("cidr-client");
+  const request = (ip) =>
+    fetch(`${baseUrl}/api/v1/whitelist`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${user.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ip }),
+    });
+
+  assert.equal((await request("203.0.113.8")).status, 201);
+  const duplicate = await request("203.0.113.222");
+  assert.equal(duplicate.status, 200);
+  assert.equal((await duplicate.json()).ip, "203.0.113.0/24");
+  assert.equal(repository.listUserIps(user.id).length, 1);
+});
+
 test("admin endpoint rejects non-boolean enabled values", async (t) => {
   const { baseUrl, repository } = await startTestApp(t);
   const user = repository.createUser("managed-user");
@@ -80,6 +101,30 @@ test("admin endpoint rejects non-boolean enabled values", async (t) => {
   assert.equal((await response.json()).error, "invalid_enabled_value");
 });
 
+test("admin can update normalized TCP and UDP port ranges", async (t) => {
+  const { baseUrl } = await startTestApp(t);
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const response = await fetch(`${baseUrl}/api/admin/settings/firewall`, {
+    method: "PATCH",
+    headers: { Cookie: cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tcpPorts: "22, 8000-9000, 8500-9500",
+      udpPorts: "53,51820",
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).settings, {
+    tcpPorts: ["22", "8000-9500"],
+    udpPorts: ["53", "51820"],
+  });
+});
+
 test("malformed cookies and unknown API routes return JSON errors", async (t) => {
   const { baseUrl } = await startTestApp(t);
   const malformedCookie = await fetch(`${baseUrl}/api/admin/overview`, {
@@ -91,4 +136,10 @@ test("malformed cookies and unknown API routes return JSON errors", async (t) =>
   const missingRoute = await fetch(`${baseUrl}/api/does-not-exist`);
   assert.equal(missingRoute.status, 404);
   assert.equal((await missingRoute.json()).error, "not_found");
+});
+
+test("dashboard is mounted only at the configured path", async (t) => {
+  const { baseUrl } = await startTestApp(t);
+  assert.equal((await fetch(`${baseUrl}/`)).status, 404);
+  assert.equal((await fetch(`${baseUrl}/manage-test/`)).status, 200);
 });

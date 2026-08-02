@@ -32,7 +32,11 @@ export function createApp({ db, config }) {
   );
   app.use("/api/internal", createInternalRouter({ repository, config }));
   app.use("/api", (_req, res) => res.status(404).json({ error: "not_found" }));
-  app.use(express.static(publicDirectory, { extensions: ["html"] }));
+  app.use(
+    config.adminPath,
+    express.static(publicDirectory, { extensions: ["html"] }),
+  );
+  app.use((_req, res) => res.status(404).send("Not Found"));
 
   app.use((error, _req, res, _next) => {
     console.error("[gatekeeper:error]", error);

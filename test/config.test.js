@@ -16,3 +16,12 @@ test("config validates port and firewall token", () => {
     /FIREWALL_SYNC_TOKEN must contain at least 24 characters/,
   );
 });
+
+test("config validates and normalizes the admin path", () => {
+  assert.equal(
+    loadConfig({ ADMIN_PATH: "secret-panel" }).adminPath,
+    "/secret-panel",
+  );
+  assert.throws(() => loadConfig({ ADMIN_PATH: "/api" }), /reserved/);
+  assert.throws(() => loadConfig({ ADMIN_PATH: "x" }), /ADMIN_PATH/);
+});

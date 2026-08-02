@@ -23,12 +23,18 @@ snapshot="$(curl --fail --silent --show-error --max-time 10 \
 printf '%s' "$snapshot" | jq -e '
   (.ipv4 | type == "array") and
   (.ipv6 | type == "array") and
+  (.tcpPorts | type == "array") and
+  (.udpPorts | type == "array") and
   (all(.ipv4[]; type == "string")) and
-  (all(.ipv6[]; type == "string"))
+  (all(.ipv6[]; type == "string")) and
+  (all(.tcpPorts[]; type == "string")) and
+  (all(.udpPorts[]; type == "string"))
 ' >/dev/null
 
 v4="$(printf '%s' "$snapshot" | jq -r '.ipv4 | join(", ")')"
 v6="$(printf '%s' "$snapshot" | jq -r '.ipv6 | join(", ")')"
+tcp_ports="$(printf '%s' "$snapshot" | jq -r '.tcpPorts | join(", ")')"
+udp_ports="$(printf '%s' "$snapshot" | jq -r '.udpPorts | join(", ")')"
 tmpfile="$(mktemp)"
 trap 'rm -f "$tmpfile"' EXIT INT TERM
 
@@ -37,6 +43,10 @@ trap 'rm -f "$tmpfile"' EXIT INT TERM
   [ -z "$v4" ] || printf 'add element inet %s allowed_v4 { %s }\n' "$NFT_TABLE" "$v4"
   printf 'flush set inet %s allowed_v6\n' "$NFT_TABLE"
   [ -z "$v6" ] || printf 'add element inet %s allowed_v6 { %s }\n' "$NFT_TABLE" "$v6"
+  printf 'flush set inet %s protected_tcp_ports\n' "$NFT_TABLE"
+  [ -z "$tcp_ports" ] || printf 'add element inet %s protected_tcp_ports { %s }\n' "$NFT_TABLE" "$tcp_ports"
+  printf 'flush set inet %s protected_udp_ports\n' "$NFT_TABLE"
+  [ -z "$udp_ports" ] || printf 'add element inet %s protected_udp_ports { %s }\n' "$NFT_TABLE" "$udp_ports"
 } > "$tmpfile"
 
 nft -c -f "$tmpfile"
