@@ -1,5 +1,5 @@
 const SCRIPT_URL =
-  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-7";
+  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-8";
 
 const safeLabel = (value) =>
   String(value || "user")
@@ -16,14 +16,14 @@ export function renderSurgeModule({
   const hostname = new URL(publicBaseUrl).hostname;
   const label = safeLabel(user.name);
   const suffix = user.id;
-  const argument = `url=${encodeURIComponent(publicBaseUrl)}&key=${encodeURIComponent(token)}&cooldown=${Math.max(1, Math.ceil(cooldownSeconds))}&device={{{device}}}`;
+  const argument = `url=${encodeURIComponent(publicBaseUrl)}&key=${encodeURIComponent(token)}&cooldown=${Math.max(1, Math.ceil(cooldownSeconds))}`;
 
   return `#!name=Gatekeeper - ${label}
 #!desc=${label} 专属网段自动加白；每次都上报并校验当前网段已出现在服务器白名单中。
 #!category=Gatekeeper
 #!author=dingding229
-#!arguments=interval:"10",device:"Surge"
-#!arguments-desc=interval: 自动检查间隔分钟（默认 10，建议 10、15、30 或 60）；device: 后台显示的设备名称
+#!arguments=interval:"10"
+#!arguments-desc=interval: 自动检查间隔分钟（默认 10，建议 10、15、30 或 60）
 
 [Rule]
 DOMAIN,${hostname},DIRECT,extended-matching

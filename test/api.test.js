@@ -248,9 +248,9 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   assert.equal(moduleResponse.status, 200);
   const moduleText = await moduleResponse.text();
   assert.match(moduleText, /#!arguments=interval:"10"/);
+  assert.doesNotMatch(moduleText, /device=\{\{\{device\}\}\}/);
   assert.match(moduleText, /cronexp="\*\/\{\{\{interval\}\}\}/);
   assert.match(moduleText, /cooldown=1/);
-  assert.match(moduleText, /device=\{\{\{device\}\}\}/);
   assert.match(moduleText, /script-update-interval=300/);
   assert.match(moduleText, /\[Panel\]/);
   assert.match(moduleText, /点击右上角刷新上报当前 IP/);

@@ -13,6 +13,7 @@ function runSurge({
   postResponse,
   lookupIp = "8.8.8.8",
   lookupError = null,
+  environment = { system: "iOS", "device-model": "iPhone17,1" },
 } = {}) {
   const store = new Map(
     Object.entries({
@@ -27,6 +28,7 @@ function runSurge({
   const context = {
     $argument:
       "url=https%3A%2F%2Fallowlist.example.com&key=sg_test&cooldown=30",
+    $environment: environment,
     $persistentStore: {
       read: (key) => store.get(key) || null,
       write: (value, key) => {
@@ -124,7 +126,13 @@ test("Surge sends a stable per-installation device identity", () => {
   const payload = JSON.parse(postOptions.body);
   assert.equal(postOptions.headers["X-Gatekeeper-Device-ID"], "device_test_01");
   assert.equal(payload.deviceId, "device_test_01");
-  assert.equal(payload.deviceName, "Surge");
+  assert.equal(payload.deviceName, "iPhone17,1 · iOS");
+});
+
+test("Surge displays its platform when the device model is unavailable", () => {
+  const { postOptions } = runSurge({ environment: { system: "macOS" } });
+  const payload = JSON.parse(postOptions.body);
+  assert.equal(payload.deviceName, "Surge · macOS");
 });
 
 test("Surge submits on every trigger even when the public IP is unchanged", () => {

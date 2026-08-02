@@ -34,7 +34,16 @@ if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) {
     Math.random().toString(36).slice(2, 12);
   $persistentStore.write(deviceId, DEVICE_ID_STORE_KEY);
 }
-var deviceName = String(config.device || "Surge").trim().slice(0, 64) || "Surge";
+var surgeEnvironment =
+  typeof $environment === "object" && $environment ? $environment : {};
+var deviceModel = String(surgeEnvironment["device-model"] || "").trim();
+var surgeSystem = String(surgeEnvironment.system || "").trim();
+var deviceName = [deviceModel || "Surge", surgeSystem]
+  .filter(function (value) {
+    return value;
+  })
+  .join(" · ")
+  .slice(0, 64);
 var STATE_KEY = "gatekeeper_allowlist_state_" + deviceId;
 var NEXT_REPORT_KEY = "gatekeeper_next_report_" + deviceId;
 var cooldownSeconds = parseInt(config.cooldown || "30", 10);
