@@ -1,4 +1,9 @@
 import { parseCookies, sha256, verifySurgeToken } from "../security.js";
+import {
+  SERVER_VERSION,
+  SURGE_MODULE_VERSION,
+  SURGE_SCRIPT_VERSION,
+} from "../version.js";
 
 export function createAuthMiddleware({ repository, config }) {
   return {
@@ -35,6 +40,24 @@ export function createAuthMiddleware({ repository, config }) {
         String(req.body?.source || "api")
           .trim()
           .slice(0, 32) || "api";
+      if (source === "surge") {
+        const moduleVersion = String(req.body?.moduleVersion || "");
+        const scriptVersion = String(req.body?.scriptVersion || "");
+        if (
+          moduleVersion !== SURGE_MODULE_VERSION ||
+          scriptVersion !== SURGE_SCRIPT_VERSION
+        ) {
+          res.set("Cache-Control", "no-store");
+          return res.status(426).json({
+            error: "module_update_required",
+            serverVersion: SERVER_VERSION,
+            requiredModuleVersion: SURGE_MODULE_VERSION,
+            requiredScriptVersion: SURGE_SCRIPT_VERSION,
+            receivedModuleVersion: moduleVersion || null,
+            receivedScriptVersion: scriptVersion || null,
+          });
+        }
+      }
       try {
         repository.touchUserDevice(
           user.id,

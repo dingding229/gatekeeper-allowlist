@@ -17,7 +17,8 @@ export function renderSurgeModule({
   const hostname = new URL(publicBaseUrl).hostname;
   const label = safeLabel(user.name);
   const suffix = user.id;
-  const argument = `url=${encodeURIComponent(publicBaseUrl)}&key=${encodeURIComponent(token)}&cooldown=${Math.max(1, Math.ceil(cooldownSeconds))}&moduleVersion=${SURGE_MODULE_VERSION}`;
+  const moduleUrl = `${publicBaseUrl}/api/v1/surge/${encodeURIComponent(token)}/module.sgmodule`;
+  const argument = `url=${encodeURIComponent(publicBaseUrl)}&key=${encodeURIComponent(token)}&cooldown=${Math.max(1, Math.ceil(cooldownSeconds))}&moduleVersion=${SURGE_MODULE_VERSION}&moduleUrl=${encodeURIComponent(moduleUrl)}`;
 
   return `#!name=Gatekeeper - ${label}
 #!version=${SURGE_MODULE_VERSION}

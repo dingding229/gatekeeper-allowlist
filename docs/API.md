@@ -81,6 +81,19 @@ RateLimit-Remaining: 0
 
 Surge 专属模块包含与后台间隔一致的本地防重复锁。即使定时任务和 `network-changed` 同时触发，也只会发送一次；如果服务端仍返回频率限制，面板显示中文原因和剩余等待时间，不显示 HTTP 状态码。
 
+Surge 上报还必须包含当前 `moduleVersion` 和 `scriptVersion`。服务端会与自身要求的版本严格匹配；不匹配时不写入设备或白名单，并返回：
+
+```json
+{
+  "error": "module_update_required",
+  "serverVersion": "1.2.0",
+  "requiredModuleVersion": "1.2.0",
+  "requiredScriptVersion": "1.2.0"
+}
+```
+
+Surge 脚本会将该响应转换成中文更新通知，点击通知可打开当前用户的最新模块安装页。
+
 ## 查询当前 Key 的网段
 
 ```http

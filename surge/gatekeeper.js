@@ -1,6 +1,6 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
-var SCRIPT_VERSION = "1.1.0";
+var SCRIPT_VERSION = "1.2.0";
 
 function argumentsFromSurge() {
   var result = {};
@@ -26,6 +26,7 @@ var config = argumentsFromSurge();
 var baseUrl = String(config.url || "").replace(/\/+$/, "");
 var apiKey = String(config.key || "");
 var moduleVersion = String(config.moduleVersion || "旧版/未知");
+var configuredModuleUrl = String(config.moduleUrl || "");
 var keySuffix = apiKey.slice(-16).replace(/[^A-Za-z0-9_-]/g, "");
 var DEVICE_ID_STORE_KEY = "gatekeeper_device_id_" + keySuffix;
 var deviceId = String($persistentStore.read(DEVICE_ID_STORE_KEY) || "");
@@ -55,6 +56,14 @@ if (!isFinite(cooldownSeconds) || cooldownSeconds < 1) cooldownSeconds = 30;
 function apiFailureReason(error, data) {
   if (error) return "网络连接失败，请检查 Gatekeeper 域名与直连规则";
   var code = data && data.error;
+  if (code === "module_update_required") {
+    return (
+      "版本不兼容：需要模块 v" +
+      String(data.requiredModuleVersion || "最新") +
+      "、脚本 v" +
+      String(data.requiredScriptVersion || "最新")
+    );
+  }
   if (code === "rate_limit_exceeded") {
     return "请求过于频繁，请在 " + String(data.retryAfter || 1) + " 秒后重试";
   }
@@ -64,6 +73,25 @@ function apiFailureReason(error, data) {
   if (code === "network_blacklisted") return "当前出口网段已被管理员拉黑";
   if (code === "invalid_ip") return "当前出口 IP 地址无法识别";
   return "Gatekeeper 暂时无法处理请求，请稍后重试";
+}
+
+function currentModuleUrl() {
+  if (/^https:\/\//i.test(configuredModuleUrl)) return configuredModuleUrl;
+  if (apiKey.indexOf("sg_") === 0) {
+    return (
+      baseUrl +
+      "/api/v1/surge/" +
+      encodeURIComponent(apiKey) +
+      "/module.sgmodule"
+    );
+  }
+  return "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.sgmodule";
+}
+
+function moduleInstallUrl() {
+  return (
+    "surge:///install-module?url=" + encodeURIComponent(currentModuleUrl())
+  );
 }
 
 function sameAllowedNetwork(left, right) {
@@ -115,6 +143,8 @@ if (
         source: "surge",
         deviceId: deviceId,
         deviceName: deviceName,
+        moduleVersion: moduleVersion,
+        scriptVersion: SCRIPT_VERSION,
       };
       if (ipInfo && ipInfo.ip) {
         payload.ipInfo = ipInfo;
@@ -148,6 +178,17 @@ if (
               );
             } else {
               $persistentStore.write("0", NEXT_REPORT_KEY);
+            }
+            if (data && data.error === "module_update_required") {
+              var updateReason = reason + "\n点击本通知打开最新模块安装页。";
+              $notification.post(
+                "Gatekeeper 必须更新",
+                "旧模块已被服务端拒绝",
+                updateReason,
+                { action: "open-url", url: moduleInstallUrl() },
+              );
+              finish("Gatekeeper：必须更新", updateReason, false);
+              return;
             }
             $notification.post("Gatekeeper 自动加白", "上报失败", reason);
             finish("Gatekeeper：上报失败", reason, false);

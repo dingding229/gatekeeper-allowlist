@@ -34,6 +34,7 @@ function runSurge({
   let requests = 0;
   let posts = 0;
   let postOptions;
+  const notifications = [];
   const context = {
     $argument: `url=https%3A%2F%2Fallowlist.example.com&key=sg_test&cooldown=30&moduleVersion=${SURGE_MODULE_VERSION}`,
     $environment: environment,
@@ -44,7 +45,9 @@ function runSurge({
         return true;
       },
     },
-    $notification: { post: () => {} },
+    $notification: {
+      post: (...items) => notifications.push(items),
+    },
     $done: (value) => {
       result = value;
     },
@@ -85,7 +88,7 @@ function runSurge({
     },
   };
   vm.runInNewContext(script, context);
-  return { result, requests, posts, store, postOptions };
+  return { result, requests, posts, store, postOptions, notifications };
 }
 
 test("Surge panel exposes module, script, and server versions", () => {
@@ -108,6 +111,27 @@ test("Surge panel exposes module, script, and server versions", () => {
     publicModule,
     new RegExp(`moduleVersion=${SURGE_MODULE_VERSION}`),
   );
+});
+
+test("Surge provides a one-tap module update when versions are rejected", () => {
+  const { result, notifications } = runSurge({
+    postResponse: {
+      status: 426,
+      body: {
+        error: "module_update_required",
+        requiredModuleVersion: SURGE_MODULE_VERSION,
+        requiredScriptVersion: SURGE_SCRIPT_VERSION,
+      },
+    },
+  });
+  assert.match(result.title, /必须更新/);
+  assert.match(result.content, /版本不兼容/);
+  const updateNotification = notifications.find(
+    (items) => items[0] === "Gatekeeper 必须更新",
+  );
+  assert.ok(updateNotification);
+  assert.equal(updateNotification[3].action, "open-url");
+  assert.match(updateNotification[3].url, /^surge:\/\/\/install-module\?url=/);
 });
 
 test("Surge translates rate limiting into a clear reason without status codes", () => {
@@ -158,6 +182,8 @@ test("Surge sends a stable per-installation device identity", () => {
   assert.equal(postOptions.headers["X-Gatekeeper-Device-ID"], "device_test_01");
   assert.equal(payload.deviceId, "device_test_01");
   assert.equal(payload.deviceName, "iPhone17,1 · iOS");
+  assert.equal(payload.moduleVersion, SURGE_MODULE_VERSION);
+  assert.equal(payload.scriptVersion, SURGE_SCRIPT_VERSION);
 });
 
 test("Surge displays its platform when the device model is unavailable", () => {

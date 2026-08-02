@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { createApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
 import { createRepository } from "../src/repository.js";
-import { SERVER_VERSION, SURGE_MODULE_VERSION } from "../src/version.js";
+import {
+  SERVER_VERSION,
+  SURGE_MODULE_VERSION,
+  SURGE_SCRIPT_VERSION,
+} from "../src/version.js";
 
 const config = {
   adminUsername: "admin",
@@ -67,6 +71,36 @@ test("empty API body uses the request source IP", async (t) => {
   assert.equal(body.ip, "127.0.0.0/24");
   assert.equal(body.applied, true);
   assert.equal(body.limit, 3);
+});
+
+test("server rejects incompatible Surge module and script versions", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const user = repository.createUser("version-bound-surge");
+  const request = (moduleVersion, scriptVersion) =>
+    fetch(`${baseUrl}/api/v1/whitelist`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${user.apiKey}`,
+        "Content-Type": "application/json",
+        "X-Gatekeeper-Device-ID": "version_test_device",
+      },
+      body: JSON.stringify({
+        source: "surge",
+        moduleVersion,
+        scriptVersion,
+      }),
+    });
+
+  const outdated = await request("1.1.0", "1.1.0");
+  assert.equal(outdated.status, 426);
+  const error = await outdated.json();
+  assert.equal(error.error, "module_update_required");
+  assert.equal(error.requiredModuleVersion, SURGE_MODULE_VERSION);
+  assert.equal(error.requiredScriptVersion, SURGE_SCRIPT_VERSION);
+  assert.equal(repository.listUserDevices(user.id).length, 0);
+
+  const compatible = await request(SURGE_MODULE_VERSION, SURGE_SCRIPT_VERSION);
+  assert.equal(compatible.status, 201);
 });
 
 test("API normalizes equivalent IPv6 addresses", async (t) => {
@@ -268,6 +302,7 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   const moduleText = await moduleResponse.text();
   assert.match(moduleText, new RegExp(`#!version=${SURGE_MODULE_VERSION}`));
   assert.match(moduleText, new RegExp(`moduleVersion=${SURGE_MODULE_VERSION}`));
+  assert.match(moduleText, /moduleUrl=https%3A/);
   assert.doesNotMatch(moduleText, /#!arguments=.*interval/);
   assert.doesNotMatch(moduleText, /device=\{\{\{device\}\}\}/);
   assert.match(moduleText, /cronexp="\*\/10 \* \* \* \*"/);
