@@ -13,6 +13,7 @@ import {
   sha256,
 } from "../security.js";
 import { parsePortRanges } from "../ports.js";
+import { normalizeIp, normalizeNetwork } from "../security.js";
 
 const SESSION_COOKIE = "allowlist_session";
 
@@ -150,6 +151,78 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
       ? repository.setUserLimit(userId, req.body.ipLimit)
       : null;
     return res.json({ ok: true, evicted: limitResult?.evicted || [] });
+  });
+
+  router.delete("/users/:id", adminAuth, (req, res) => {
+    const userId = validId(req.params.id);
+    if (!userId) return res.status(400).json({ error: "invalid_user_id" });
+    if (!repository.deleteUser(userId))
+      return res.status(404).json({ error: "user_not_found" });
+    return res.json({ ok: true });
+  });
+
+  router.post("/network-rules/blacklist", adminAuth, (req, res, next) => {
+    const normalized = normalizeNetwork(req.body?.ip);
+    if (!normalized) return res.status(400).json({ error: "invalid_ip" });
+    const reason = String(req.body?.reason || "")
+      .trim()
+      .slice(0, 160);
+    try {
+      const result = repository.addBlockedNetwork(
+        normalized.network,
+        normalized.family,
+        reason,
+      );
+      return res
+        .status(201)
+        .json({ ok: true, network: normalized.network, ...result });
+    } catch (error) {
+      if (String(error.message).includes("UNIQUE"))
+        return res.status(409).json({ error: "network_already_blacklisted" });
+      return next(error);
+    }
+  });
+
+  router.delete("/network-rules/blacklist/:id", adminAuth, (req, res) => {
+    const id = validId(req.params.id);
+    if (!id) return res.status(400).json({ error: "invalid_rule_id" });
+    if (!repository.removeBlockedNetwork(id))
+      return res.status(404).json({ error: "rule_not_found" });
+    return res.json({ ok: true });
+  });
+
+  router.post("/network-rules/permanent", adminAuth, (req, res, next) => {
+    const raw = String(req.body?.ip || "").trim();
+    const ip = raw.includes("/") ? null : normalizeIp(raw);
+    if (!ip)
+      return res.status(400).json({
+        error: "invalid_ip",
+        message: "必须填写单个 IPv4 或 IPv6 地址",
+      });
+    const network = normalizeNetwork(ip);
+    if (repository.isNetworkBlocked(network.network))
+      return res
+        .status(409)
+        .json({ error: "network_blacklisted", network: network.network });
+    const label = String(req.body?.label || "")
+      .trim()
+      .slice(0, 80);
+    try {
+      const id = repository.addPermanentIp(ip, network.family, label);
+      return res.status(201).json({ ok: true, id, ip });
+    } catch (error) {
+      if (String(error.message).includes("UNIQUE"))
+        return res.status(409).json({ error: "ip_already_permanent" });
+      return next(error);
+    }
+  });
+
+  router.delete("/network-rules/permanent/:id", adminAuth, (req, res) => {
+    const id = validId(req.params.id);
+    if (!id) return res.status(400).json({ error: "invalid_rule_id" });
+    if (!repository.removePermanentIp(id))
+      return res.status(404).json({ error: "rule_not_found" });
+    return res.json({ ok: true });
   });
 
   router.get("/users/:id/history", adminAuth, (req, res) => {

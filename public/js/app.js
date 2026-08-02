@@ -207,6 +207,22 @@ $("#userList").addEventListener("click", async (event) => {
       return;
     }
 
+    const deleteUserButton = event.target.closest("[data-delete-user]");
+    if (
+      deleteUserButton &&
+      window.confirm(
+        "确定永久删除该用户？其当前网段和全部历史记录也会被删除，此操作不可撤销。",
+      )
+    ) {
+      await apiRequest(
+        `/api/admin/users/${deleteUserButton.dataset.deleteUser}`,
+        { method: "DELETE" },
+      );
+      showToast("用户已删除");
+      await loadDashboard();
+      return;
+    }
+
     const historyButton = event.target.closest("[data-history]");
     if (historyButton) {
       const user = state.users.find(
@@ -242,6 +258,46 @@ $("#userList").addEventListener("click", async (event) => {
     }
   } catch {
     showToast("操作失败，请刷新后重试");
+  }
+});
+
+async function submitRuleForm(event, path) {
+  event.preventDefault();
+  const body = Object.fromEntries(new FormData(event.target));
+  try {
+    await apiRequest(path, { method: "POST", body: JSON.stringify(body) });
+    event.target.reset();
+    showToast("规则已保存，正在同步防火墙");
+    await loadDashboard();
+  } catch (error) {
+    showToast(
+      error.message === "network_blacklisted"
+        ? "该 IP 所在网段已被拉黑"
+        : "规则保存失败",
+    );
+  }
+}
+
+$("#blacklistForm").addEventListener("submit", (event) =>
+  submitRuleForm(event, "/api/admin/network-rules/blacklist"),
+);
+$("#permanentForm").addEventListener("submit", (event) =>
+  submitRuleForm(event, "/api/admin/network-rules/permanent"),
+);
+$("#rulesTab").addEventListener("click", async (event) => {
+  const unblock = event.target.closest("[data-unblock]");
+  const permanent = event.target.closest("[data-remove-permanent]");
+  if (!unblock && !permanent) return;
+  if (!window.confirm("确定移除这条规则？")) return;
+  const path = unblock
+    ? `/api/admin/network-rules/blacklist/${unblock.dataset.unblock}`
+    : `/api/admin/network-rules/permanent/${permanent.dataset.removePermanent}`;
+  try {
+    await apiRequest(path, { method: "DELETE" });
+    showToast("规则已移除");
+    await loadDashboard();
+  } catch {
+    showToast("操作失败");
   }
 });
 

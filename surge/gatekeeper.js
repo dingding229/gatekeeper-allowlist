@@ -37,14 +37,20 @@ if (
   );
   finish("Gatekeeper：未配置", "请编辑模块参数 url、domain 和 key", false);
 } else {
-  $httpClient.post(
+  function report(ipInfo) {
+    var payload = { source: "surge" };
+    if (ipInfo && ipInfo.ip) {
+      payload.ip = ipInfo.ip;
+      payload.ipInfo = ipInfo;
+    }
+    $httpClient.post(
     {
       url: baseUrl + "/api/v1/whitelist",
       headers: {
         Authorization: "Bearer " + apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ source: "surge" }),
+      body: JSON.stringify(payload),
       timeout: 15,
     },
     function (error, response, body) {
@@ -86,5 +92,31 @@ if (
       }
       finish(title, content, true);
     },
+    );
+  }
+
+  $httpClient.get(
+    {
+      url: "https://64.ipcheck.ing/geo",
+      headers: { "User-Agent": "curl/8.0 Gatekeeper-Surge/1.0" },
+      timeout: 10,
+    },
+    function (error, response, body) {
+      var status = response && (response.status || response.statusCode);
+      if (error || status < 200 || status >= 300) return report(null);
+      var fields = {};
+      String(body || "").split(/\r?\n/).forEach(function (line) {
+        var separator = line.indexOf(":");
+        if (separator > 0) fields[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+      });
+      report(fields.IP ? {
+        source: "ipcheck.ing",
+        ip: fields.IP,
+        country: fields.Country || "",
+        region: fields.Region || "",
+        city: fields.City || "",
+        isp: fields.Org || ""
+      } : null);
+    }
   );
 }

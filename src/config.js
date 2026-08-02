@@ -68,19 +68,13 @@ export function loadConfig(env = process.env) {
     adminPassword: env.ADMIN_PASSWORD || DEFAULT_PASSWORD,
     firewallSyncToken: env.FIREWALL_SYNC_TOKEN || "",
     publicBaseUrl: publicBaseUrlValue(env),
-    ipGeolocationEnabled: env.IP_GEOLOCATION_ENABLED !== "0",
-    ipGeolocationUrl: httpsUrlValue(
-      env.IP_GEOLOCATION_URL ||
-        "https://ipwho.is/{ip}?fields=success,country,region,city,connection.isp&lang=zh-CN",
-      "IP_GEOLOCATION_URL",
-    ),
     serverIpLookupUrls: [
       httpsUrlValue(
-        env.SERVER_IPV4_LOOKUP_URL || "https://api.ipify.org?format=json",
+        env.SERVER_IPV4_LOOKUP_URL || "https://4.ipcheck.ing/geo",
         "SERVER_IPV4_LOOKUP_URL",
       ),
       httpsUrlValue(
-        env.SERVER_IPV6_LOOKUP_URL || "https://api6.ipify.org?format=json",
+        env.SERVER_IPV6_LOOKUP_URL || "https://6.ipcheck.ing/geo",
         "SERVER_IPV6_LOOKUP_URL",
       ),
     ],

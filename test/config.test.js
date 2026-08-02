@@ -44,7 +44,7 @@ test("config derives and validates the public base URL", () => {
 
 test("IP information endpoints require HTTPS and bounded timeouts", () => {
   assert.throws(
-    () => loadConfig({ IP_GEOLOCATION_URL: "http://example.com/{ip}" }),
+    () => loadConfig({ SERVER_IPV4_LOOKUP_URL: "http://example.com/geo" }),
     /must use HTTPS/,
   );
   assert.throws(
@@ -52,7 +52,7 @@ test("IP information endpoints require HTTPS and bounded timeouts", () => {
     /between 500 and 15000/,
   );
   assert.equal(
-    loadConfig({ IP_GEOLOCATION_ENABLED: "0" }).ipGeolocationEnabled,
-    false,
+    loadConfig({}).serverIpLookupUrls[0],
+    "https://4.ipcheck.ing/geo",
   );
 });

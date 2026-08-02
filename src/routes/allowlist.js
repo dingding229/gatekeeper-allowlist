@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { normalizeIp, normalizeNetwork } from "../security.js";
+import { sanitizeReportedIpInfo } from "../ip-info.js";
 
-export function createAllowlistRouter({ repository, apiAuth, ipInfo }) {
+export function createAllowlistRouter({ repository, apiAuth }) {
   const router = Router();
 
   router.post("/whitelist", apiAuth, (req, res, next) => {
@@ -13,6 +14,11 @@ export function createAllowlistRouter({ repository, apiAuth, ipInfo }) {
           error: "invalid_ip",
           message: "ip must be a valid IPv4 or IPv6 address",
         });
+      }
+      if (repository.isNetworkBlocked(normalized.network)) {
+        return res
+          .status(403)
+          .json({ error: "network_blacklisted", network: normalized.network });
       }
 
       const source =
@@ -27,17 +33,9 @@ export function createAllowlistRouter({ repository, apiAuth, ipInfo }) {
         normalized.family,
         source,
       );
-      const cachedLocation = repository.getCachedIpLocation(observedIp);
-      void Promise.resolve(cachedLocation || ipInfo.lookup(observedIp))
-        .then((location) => {
-          if (location) {
-            if (!cachedLocation) {
-              repository.saveIpLocation(observedIp, location);
-            }
-            repository.updateHistoryLocation(result.historyId, location);
-          }
-        })
-        .catch(() => {});
+      const location = sanitizeReportedIpInfo(req.body?.ipInfo);
+      if (location)
+        repository.updateHistoryLocation(result.historyId, location);
       const ips = repository.listUserIps(req.user.id);
       return res.status(result.status === "added" ? 201 : 200).json({
         ok: true,

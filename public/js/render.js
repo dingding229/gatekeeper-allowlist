@@ -11,6 +11,11 @@ const actionNames = {
   "ip.cleared": "清空用户网段",
   "user.limit": "调整网段配额",
   "settings.updated": "更新端口设置",
+  "user.deleted": "删除用户",
+  "network.blocked": "拉黑网段",
+  "network.unblocked": "解除拉黑",
+  "permanent.added": "永久放行",
+  "permanent.removed": "移除永久放行",
 };
 
 const locationText = (ip) =>
@@ -29,7 +34,7 @@ function renderIpRows(ips) {
       <td>
         <code>${escapeHtml(ip.ip)}</code><br>
         <small>IPv${ip.family} · ${escapeHtml(ip.source)} · 上报 IP ${escapeHtml(ip.observed_ip || "—")}</small><br>
-        <small>${escapeHtml(locationText(ip))}${ip.isp ? ` · ${escapeHtml(ip.isp)}` : ""}</small>
+        <small>${escapeHtml(locationText(ip))}${ip.isp ? ` · ${escapeHtml(ip.isp)}` : ""}${ip.geo_source ? ` · ${escapeHtml(ip.geo_source)}` : ""}</small>
       </td>
       <td>
         <small>
@@ -82,6 +87,7 @@ function renderUser(user, allIps) {
           <button class="ghost" data-surge="${user.id}">Surge 安装地址</button>
           <button class="ghost" data-history="${user.id}">历史 IP</button>
           <button class="danger-outline" data-clear-ips="${user.id}">清空网段</button>
+          <button class="danger-outline" data-delete-user="${user.id}">删除用户</button>
         </div>
       </div>
     </article>
@@ -131,6 +137,25 @@ export function renderDashboard(state, query = "") {
         )
         .join("")
     : '<div class="empty">暂无操作记录</div>';
+
+  document.querySelector("#blacklistList").innerHTML = state.blockedNetworks
+    ?.length
+    ? state.blockedNetworks
+        .map(
+          (row) =>
+            `<div class="audit-row"><code>${escapeHtml(row.network)}</code><small>${escapeHtml(row.reason || "无备注")}</small><button class="danger-link" data-unblock="${row.id}">解除</button></div>`,
+        )
+        .join("")
+    : '<div class="empty">暂无黑名单网段</div>';
+  document.querySelector("#permanentList").innerHTML = state.permanentWhitelist
+    ?.length
+    ? state.permanentWhitelist
+        .map(
+          (row) =>
+            `<div class="audit-row"><code>${escapeHtml(row.ip)}</code><small>${escapeHtml(row.label || "无备注")}</small><button class="danger-link" data-remove-permanent="${row.id}">移除</button></div>`,
+        )
+        .join("")
+    : '<div class="empty">暂无永久放行 IP</div>';
 }
 
 export function renderHistory(rows) {
@@ -139,7 +164,7 @@ export function renderHistory(rows) {
     .map(
       (row) => `<tr>
         <td><code>${escapeHtml(row.observed_ip)}</code><br><small>${escapeHtml(row.network)} · ${escapeHtml(row.source)}</small></td>
-        <td>${escapeHtml(locationText(row))}<br><small>${escapeHtml(row.isp || "—")}</small></td>
+        <td>${escapeHtml(locationText(row))}<br><small>${escapeHtml(row.isp || "—")}${row.geo_source ? ` · ${escapeHtml(row.geo_source)}` : ""}</small></td>
         <td>${row.status === "added" ? "新增" : "已存在"}</td>
         <td><small>${formatTime(row.created_at)}</small></td>
       </tr>`,

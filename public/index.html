@@ -77,6 +77,7 @@
           <button class="active" data-tab="users">用户与网段</button
           ><button data-tab="audit">操作记录</button
           ><button data-tab="settings">端口设置</button
+          ><button data-tab="rules">全局规则</button
           ><button data-tab="api">API 使用</button>
         </nav>
 
@@ -93,6 +94,43 @@
             />
           </div>
           <div id="userList" class="user-list"></div>
+        </section>
+
+        <section id="rulesTab" class="panel tab-content hidden">
+          <div class="panel-head">
+            <div>
+              <h2>全局访问规则</h2>
+              <p>黑名单优先级最高；永久 IP 不占用户网段槽位</p>
+            </div>
+          </div>
+          <form id="blacklistForm" class="settings-form">
+            <h3>拉黑网段</h3>
+            <label
+              >IP 或网段<input
+                name="ip"
+                placeholder="例如：203.0.113.8（自动转换为 /24）"
+                required
+            /></label>
+            <label
+              >原因<input name="reason" maxlength="160" placeholder="可选"
+            /></label>
+            <button class="danger-outline" type="submit">加入黑名单</button>
+          </form>
+          <div id="blacklistList" class="audit-list"></div>
+          <form id="permanentForm" class="settings-form">
+            <h3>永久放行 IP</h3>
+            <label
+              >单个 IP<input name="ip" placeholder="例如：203.0.113.8" required
+            /></label>
+            <label
+              >备注<input
+                name="label"
+                maxlength="80"
+                placeholder="例如：办公室固定出口"
+            /></label>
+            <button class="primary" type="submit">永久放行</button>
+          </form>
+          <div id="permanentList" class="audit-list"></div>
         </section>
 
         <section id="auditTab" class="panel tab-content hidden">
@@ -198,8 +236,8 @@
         <div class="success-icon">S</div>
         <h2>Surge 专属模块</h2>
         <p class="muted">
-          地址包含该用户的专属授权，请勿公开分享。模块每 3
-          分钟和网络切换时自动加白；手动刷新面板位于 Surge iOS 的策略选择页面。
+          地址包含该用户的专属授权，请勿公开分享。安装模块时可设置上报间隔；网络切换也会触发。手动刷新面板位于
+          Surge iOS 的策略选择页面。
         </p>
         <div class="key-box">
           <code id="surgeModuleUrl"></code

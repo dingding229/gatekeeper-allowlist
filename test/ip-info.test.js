@@ -1,38 +1,55 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createIpInfoService, isPublicIp } from "../src/ip-info.js";
+import {
+  createIpInfoService,
+  parseIpCheckText,
+  sanitizeReportedIpInfo,
+} from "../src/ip-info.js";
 
-test("public IP detection excludes private and documentation ranges", () => {
-  assert.equal(isPublicIp("8.8.8.8"), true);
-  assert.equal(isPublicIp("10.0.0.1"), false);
-  assert.equal(isPublicIp("203.0.113.8"), false);
-  assert.equal(isPublicIp("2606:4700:4700::1111"), true);
-  assert.equal(isPublicIp("2001:db8::1"), false);
+test("IPCheck text is parsed and reported metadata is sanitized", () => {
+  const parsed = parseIpCheckText(
+    "IP: 8.8.8.8\nCity: Mountain View\nRegion: California\nCountry: US\nOrg: Example ISP\nASN: AS15169\n",
+  );
+  assert.equal(parsed.ip, "8.8.8.8");
+  assert.equal(parsed.countryCode, "US");
+  assert.equal(parsed.city, "Mountain View");
+  assert.equal(parsed.source, "ipcheck.ing");
+  assert.equal(parseIpCheckText("IP: invalid"), null);
+  assert.equal(sanitizeReportedIpInfo({ source: "other", city: "x" }), null);
+  assert.equal(
+    sanitizeReportedIpInfo({ source: "ipcheck.ing", city: "Macau" }).city,
+    "Macau",
+  );
 });
 
-test("IP information service sanitizes location and caches server IPs", async () => {
+test("IP information service uses IPCheck and caches server IPs", async () => {
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(url);
-    const body = url.includes("ipwho")
-      ? {
-          success: true,
-          country: "United States",
-          region: "California",
-          city: "Mountain View",
-          connection: { isp: "Example ISP" },
-        }
-      : { ip: url.includes("api6") ? "2606:4700::1" : "8.8.8.8" };
-    return { ok: true, json: async () => body };
+    const ip = url.includes("6.ipcheck") ? "2606:4700::1" : "8.8.8.8";
+    return {
+      ok: true,
+      text: async () => `IP: ${ip}\nCity: Test\nCountry: US\nOrg: ISP\n`,
+    };
   };
   const service = createIpInfoService({ config: {}, fetchImpl });
-  const location = await service.lookup("8.8.8.8");
-  assert.equal(location.city, "Mountain View");
-  assert.equal(location.isp, "Example ISP");
-
   const first = await service.getServerInfo();
   const second = await service.getServerInfo();
   assert.deepEqual(first.ips, ["8.8.8.8", "2606:4700::1"]);
+  assert.equal(first.source, "ipcheck.ing");
   assert.deepEqual(second.ips, first.ips);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
+});
+
+test("IPCheck requests use a CLI user agent to avoid browser challenges", async () => {
+  let headers;
+  const service = createIpInfoService({
+    config: { serverIpLookupUrls: ["https://4.ipcheck.ing/geo"] },
+    fetchImpl: async (_url, options) => {
+      headers = options.headers;
+      return { ok: true, text: async () => "IP: 8.8.8.8\nCountry: US\n" };
+    },
+  });
+  await service.getServerInfo();
+  assert.match(headers["User-Agent"], /^curl\//);
 });

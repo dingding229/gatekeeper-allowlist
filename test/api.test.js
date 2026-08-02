@@ -170,7 +170,9 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   const moduleResponse = await fetch(`${baseUrl}${moduleUrl.pathname}`);
   assert.equal(moduleResponse.status, 200);
   const moduleText = await moduleResponse.text();
-  assert.match(moduleText, /cronexp="\*\/3 \* \* \* \*"/);
+  assert.match(moduleText, /#!arguments=interval:"3"/);
+  assert.match(moduleText, /cronexp="\*\/\{\{\{interval\}\}\}/);
+  assert.doesNotMatch(moduleText, /update-interval=/);
   assert.match(moduleText, /\[Panel\]/);
   assert.match(moduleText, /点击右上角刷新按钮手动加白/);
 
@@ -216,6 +218,81 @@ test("client API is limited to one request per user per minute", async (t) => {
   assert.equal(blocked.headers.get("ratelimit-limit"), "1");
   assert.match(blocked.headers.get("retry-after"), /^\d+$/);
   assert.equal((await blocked.json()).error, "rate_limit_exceeded");
+});
+
+test("admin manages blacklist, permanent IPs, and user deletion", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const user = repository.createUser("rules-client");
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "admin", password: "test-password" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const adminHeaders = { Cookie: cookie, "Content-Type": "application/json" };
+
+  const permanent = await fetch(
+    `${baseUrl}/api/admin/network-rules/permanent`,
+    {
+      method: "POST",
+      headers: adminHeaders,
+      body: JSON.stringify({ ip: "198.51.100.9", label: "office" }),
+    },
+  );
+  assert.equal(permanent.status, 201);
+  assert.deepEqual(repository.getFirewallSnapshot().ipv4, ["198.51.100.9"]);
+
+  const blocked = await fetch(`${baseUrl}/api/admin/network-rules/blacklist`, {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({ ip: "198.51.100.88", reason: "abuse" }),
+  });
+  assert.equal(blocked.status, 201);
+  assert.equal((await blocked.json()).network, "198.51.100.0/24");
+  assert.deepEqual(repository.getFirewallSnapshot().ipv4, []);
+
+  const report = await fetch(`${baseUrl}/api/v1/whitelist`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${user.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ip: "198.51.100.77" }),
+  });
+  assert.equal(report.status, 403);
+  assert.equal((await report.json()).error, "network_blacklisted");
+
+  const deletion = await fetch(`${baseUrl}/api/admin/users/${user.id}`, {
+    method: "DELETE",
+    headers: adminHeaders,
+  });
+  assert.equal(deletion.status, 200);
+  assert.equal(repository.findUserById(user.id), undefined);
+});
+
+test("reported IPCheck metadata is recorded in user history", async (t) => {
+  const { baseUrl, repository } = await startTestApp(t);
+  const user = repository.createUser("geo-client");
+  const response = await fetch(`${baseUrl}/api/v1/whitelist`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${user.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ip: "8.8.8.8",
+      ipInfo: {
+        source: "ipcheck.ing",
+        country: "US",
+        city: "Mountain View",
+        isp: "Example",
+      },
+    }),
+  });
+  assert.equal(response.status, 201);
+  const [history] = repository.listUserHistory(user.id);
+  assert.equal(history.city, "Mountain View");
+  assert.equal(history.geo_source, "ipcheck.ing");
 });
 
 test("admin can set user quota, inspect history, and clear active networks", async (t) => {

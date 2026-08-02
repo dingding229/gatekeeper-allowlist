@@ -1,9 +1,9 @@
 import { API_RATE_LIMIT_WINDOW_MS, DEFAULT_IP_LIMIT } from "./constants.js";
-import { createApiKey, sha256 } from "./security.js";
+import { createApiKey, normalizeNetwork, sha256 } from "./security.js";
 
 const activeIpQuery = `
   SELECT w.id, w.ip, w.family, w.source, w.created_at, w.last_seen_at,
-         h.observed_ip, h.country, h.region, h.city, h.isp
+         h.observed_ip, h.country, h.region, h.city, h.isp, h.geo_source
   FROM whitelist_ips w
   LEFT JOIN ip_history h ON h.id = (
     SELECT latest.id FROM ip_history latest
@@ -84,7 +84,7 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       return db
         .prepare(
           `SELECT id, observed_ip, network, family, source, status,
-                  country, region, city, isp, created_at
+                  country, region, city, isp, geo_source, created_at
            FROM ip_history WHERE user_id = ?
            ORDER BY id DESC LIMIT ? OFFSET ?`,
         )
@@ -181,7 +181,7 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       return Boolean(
         db
           .prepare(
-            `UPDATE ip_history SET country = ?, region = ?, city = ?, isp = ?
+            `UPDATE ip_history SET country = ?, region = ?, city = ?, isp = ?, geo_source = ?
              WHERE id = ?`,
           )
           .run(
@@ -189,6 +189,7 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
             location.region || null,
             location.city || null,
             location.isp || null,
+            location.source || null,
             historyId,
           ).changes,
       );
@@ -290,6 +291,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         users,
         ips: ownedIps,
         audit,
+        blockedNetworks: this.listBlockedNetworks(),
+        permanentWhitelist: this.listPermanentWhitelist(),
         settings: this.getFirewallSettings(),
         stats: {
           users: users.length,
@@ -460,6 +463,138 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       }
     },
 
+    deleteUser(userId) {
+      let revision = null;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const user = db
+          .prepare("SELECT name FROM users WHERE id = ?")
+          .get(userId);
+        if (!user) {
+          db.exec("ROLLBACK");
+          return false;
+        }
+        const count = db
+          .prepare(
+            "SELECT count(*) AS count FROM whitelist_ips WHERE user_id = ?",
+          )
+          .get(userId).count;
+        db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+        insertAudit.run(
+          null,
+          "user.deleted",
+          null,
+          `${user.name}; removed=${count}`,
+        );
+        revision = bumpFirewallRevision();
+        db.exec("COMMIT");
+        notifyFirewallChange(revision);
+        return true;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
+    listBlockedNetworks() {
+      return db
+        .prepare(
+          "SELECT id, network, family, reason, created_at FROM blocked_networks ORDER BY id DESC",
+        )
+        .all();
+    },
+
+    isNetworkBlocked(network) {
+      return Boolean(
+        db
+          .prepare("SELECT 1 FROM blocked_networks WHERE network = ?")
+          .get(network),
+      );
+    },
+
+    addBlockedNetwork(network, family, reason = "") {
+      let revision;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const result = db
+          .prepare(
+            "INSERT INTO blocked_networks (network, family, reason) VALUES (?, ?, ?)",
+          )
+          .run(network, family, reason || null);
+        const removedUsers = db
+          .prepare("DELETE FROM whitelist_ips WHERE ip = ?")
+          .run(network).changes;
+        const permanent = db
+          .prepare("SELECT id, ip FROM permanent_whitelist")
+          .all();
+        let removedPermanent = 0;
+        for (const row of permanent) {
+          if (normalizeNetwork(row.ip)?.network === network) {
+            removedPermanent += db
+              .prepare("DELETE FROM permanent_whitelist WHERE id = ?")
+              .run(row.id).changes;
+          }
+        }
+        insertAudit.run(
+          null,
+          "network.blocked",
+          network,
+          `${reason || ""}; removed=${removedUsers + removedPermanent}`,
+        );
+        revision = bumpFirewallRevision();
+        db.exec("COMMIT");
+        notifyFirewallChange(revision);
+        return {
+          id: Number(result.lastInsertRowid),
+          removed: removedUsers + removedPermanent,
+        };
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
+    removeBlockedNetwork(id) {
+      const row = db
+        .prepare("SELECT network FROM blocked_networks WHERE id = ?")
+        .get(id);
+      if (!row) return false;
+      db.prepare("DELETE FROM blocked_networks WHERE id = ?").run(id);
+      insertAudit.run(null, "network.unblocked", row.network, null);
+      notifyFirewallChange(bumpFirewallRevision());
+      return true;
+    },
+
+    listPermanentWhitelist() {
+      return db
+        .prepare(
+          "SELECT id, ip, family, label, created_at FROM permanent_whitelist ORDER BY id DESC",
+        )
+        .all();
+    },
+
+    addPermanentIp(ip, family, label = "") {
+      const result = db
+        .prepare(
+          "INSERT INTO permanent_whitelist (ip, family, label) VALUES (?, ?, ?)",
+        )
+        .run(ip, family, label || null);
+      insertAudit.run(null, "permanent.added", ip, label || null);
+      notifyFirewallChange(bumpFirewallRevision());
+      return Number(result.lastInsertRowid);
+    },
+
+    removePermanentIp(id) {
+      const row = db
+        .prepare("SELECT ip FROM permanent_whitelist WHERE id = ?")
+        .get(id);
+      if (!row) return false;
+      db.prepare("DELETE FROM permanent_whitelist WHERE id = ?").run(id);
+      insertAudit.run(null, "permanent.removed", row.ip, null);
+      notifyFirewallChange(bumpFirewallRevision());
+      return true;
+    },
+
     getFirewallRevision() {
       return Number(
         db
@@ -473,15 +608,28 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         .prepare(
           `SELECT DISTINCT w.ip, w.family FROM whitelist_ips w
            JOIN users u ON u.id = w.user_id WHERE u.enabled = 1
+           AND NOT EXISTS (SELECT 1 FROM blocked_networks b WHERE b.network = w.ip)
            ORDER BY w.family, w.ip`,
         )
         .all();
+      const permanent = this.listPermanentWhitelist().filter(
+        (row) => !this.isNetworkBlocked(normalizeNetwork(row.ip)?.network),
+      );
+      const allRows = [...rows, ...permanent];
       const settings = this.getFirewallSettings();
       return {
         generatedAt: new Date().toISOString(),
         revision: this.getFirewallRevision(),
-        ipv4: rows.filter((row) => row.family === 4).map((row) => row.ip),
-        ipv6: rows.filter((row) => row.family === 6).map((row) => row.ip),
+        ipv4: [
+          ...new Set(
+            allRows.filter((row) => row.family === 4).map((row) => row.ip),
+          ),
+        ],
+        ipv6: [
+          ...new Set(
+            allRows.filter((row) => row.family === 6).map((row) => row.ip),
+          ),
+        ],
         tcpPorts: settings.tcpPorts,
         udpPorts: settings.udpPorts,
       };

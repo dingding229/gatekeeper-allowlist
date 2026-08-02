@@ -42,6 +42,7 @@ const schema = `
     region TEXT,
     city TEXT,
     isp TEXT,
+    geo_source TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
@@ -63,6 +64,22 @@ const schema = `
   CREATE TABLE IF NOT EXISTS api_rate_limits (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     last_request_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS blocked_networks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    network TEXT NOT NULL UNIQUE,
+    family INTEGER NOT NULL CHECK (family IN (4, 6)),
+    reason TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS permanent_whitelist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT NOT NULL UNIQUE,
+    family INTEGER NOT NULL CHECK (family IN (4, 6)),
+    label TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
 
   CREATE TABLE IF NOT EXISTS audit_log (
@@ -156,6 +173,7 @@ export function openDatabase(filename) {
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec(schema);
   ensureColumn(db, "users", "ip_limit", "INTEGER NOT NULL DEFAULT 3");
+  ensureColumn(db, "ip_history", "geo_source", "TEXT");
   migrateNetworks(db);
   return db;
 }

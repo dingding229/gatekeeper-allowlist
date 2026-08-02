@@ -32,7 +32,23 @@ Authorization: Bearer awl_xxx
 {"ip":"203.0.113.8","source":"office"}
 ```
 
-服务端会把 IPv4 规范化为所属 `/24`，IPv6 规范化为所属 `/64`。新网段返回 `201`，已存在的网段返回 `200`。每个用户默认保留 3 个不同网段，管理员可在后台调整为 1–100 个；超出配额会淘汰最早加入的网段。每次成功上报都会写入历史记录，并异步查询公网 IP 的地区和运营商，查询失败不影响加白。
+服务端会把 IPv4 规范化为所属 `/24`，IPv6 规范化为所属 `/64`。新网段返回 `201`，已存在的网段返回 `200`。每个用户默认保留 3 个不同网段，管理员可在后台调整为 1–100 个；超出配额会淘汰最早加入的网段。每次成功上报都会写入历史记录。客户端可先通过 `https://64.ipcheck.ing/geo` 查询自己的信息，再附带 `ipInfo`；Surge 模块已自动完成此步骤。该展示信息不参与授权判断。
+
+```json
+{
+  "ip": "203.0.113.8",
+  "source": "surge",
+  "ipInfo": {
+    "source": "ipcheck.ing",
+    "country": "CN",
+    "region": "Guangdong",
+    "city": "Shenzhen",
+    "isp": "Example ISP"
+  }
+}
+```
+
+如果所属网段已被管理员拉黑，返回 `403 network_blacklisted`。黑名单优先于用户白名单和永久放行 IP。
 
 ```json
 {
@@ -83,6 +99,7 @@ GET /health
 | 400 | `invalid_ip` | IP 地址格式错误 |
 | 401 | `missing_api_key` | 未提供 Key |
 | 401 | `invalid_api_key` | Key 错误、已轮换或用户已停用 |
+| 403 | `network_blacklisted` | 该 IP 所属网段已被管理员拉黑 |
 | 429 | `rate_limit_exceeded` | 该用户在最近 60 秒内已访问客户端 API |
 | 500 | `internal_error` | 服务端异常 |
 
