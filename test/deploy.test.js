@@ -117,6 +117,14 @@ test("deployment installs validated off-volume backups and restore tooling", () 
   assert.match(updater, /gatekeeper-backup\.timer/);
 });
 
+test("updater bypasses source caches and verifies the running version", () => {
+  assert.match(updater, /Cache-Control: no-cache/);
+  assert.match(updater, /--force-recreate gatekeeper/);
+  assert.match(updater, /EXPECTED_VERSION/);
+  assert.match(updater, /DEPLOYED_VERSION/);
+  assert.match(updater, /版本校验失败/);
+});
+
 test("nftables installer validates then atomically writes the config", (t) => {
   const directory = mkdtempSync(join(tmpdir(), "gatekeeper-nft-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));

@@ -180,7 +180,10 @@ done
 info "下载最新源码"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
-curl --retry 3 --retry-delay 2 -fsSL "https://github.com/$REPOSITORY/archive/refs/heads/$BRANCH.tar.gz" \
+DOWNLOAD_NONCE="$(date +%s)"
+curl --retry 3 --retry-delay 2 -fsSL \
+  -H 'Cache-Control: no-cache' \
+  "https://github.com/$REPOSITORY/archive/refs/heads/$BRANCH.tar.gz?gatekeeper=$DOWNLOAD_NONCE" \
   | tar -xz -C "$TEMP_DIR" --strip-components=1
 [[ -x "$TEMP_DIR/scripts/render-nftables.sh" \
   && -x "$TEMP_DIR/scripts/install-nftables-config.sh" \
@@ -191,8 +194,13 @@ curl --retry 3 --retry-delay 2 -fsSL "https://github.com/$REPOSITORY/archive/ref
   && -f "$TEMP_DIR/deploy/systemd/gatekeeper-backup.service" \
   && -f "$TEMP_DIR/deploy/systemd/gatekeeper-backup.timer" \
   && -f "$TEMP_DIR/deploy/systemd/gatekeeper-sync-listener.service" \
-  && -f "$TEMP_DIR/deploy/nftables/gatekeeper.nft.template" ]] \
+  && -f "$TEMP_DIR/deploy/nftables/gatekeeper.nft.template" \
+  && -f "$TEMP_DIR/src/version.js" ]] \
   || fail "下载的源码不完整"
+EXPECTED_VERSION="$(sed -n 's/^export const SERVER_VERSION = "\([^"]*\)";$/\1/p' "$TEMP_DIR/src/version.js")"
+[[ "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || fail "下载的源码缺少有效服务端版本"
+info "已下载 Gatekeeper v$EXPECTED_VERSION"
 
 info "创建更新前数据库备份"
 chmod 755 "$TEMP_DIR/scripts/backup.sh"
@@ -205,15 +213,20 @@ chmod 755 "$INSTALL_DIR/scripts/"*.sh
 cd "$INSTALL_DIR"
 
 info "重新构建并启动服务"
-docker compose up -d --build
+docker compose up -d --build --force-recreate gatekeeper
+docker compose up -d caddy
+HEALTH_JSON=""
 for _ in $(seq 1 60); do
-  curl -fsS http://127.0.0.1:8787/health >/dev/null 2>&1 && break
+  HEALTH_JSON="$(curl -fsS http://127.0.0.1:8787/health 2>/dev/null || true)"
+  printf '%s' "$HEALTH_JSON" | jq -e '.ok == true' >/dev/null 2>&1 && break
   sleep 2
 done
-curl -fsS http://127.0.0.1:8787/health >/dev/null || {
+DEPLOYED_VERSION="$(printf '%s' "$HEALTH_JSON" | jq -r '.version // empty' 2>/dev/null || true)"
+if [[ "$DEPLOYED_VERSION" != "$EXPECTED_VERSION" ]]; then
   docker compose logs --tail=100
-  fail "Gatekeeper 启动失败"
-}
+  fail "版本校验失败：已下载 v$EXPECTED_VERSION，当前容器为 v${DEPLOYED_VERSION:-未知}"
+fi
+info "容器版本校验通过：v$DEPLOYED_VERSION"
 
 if ((ENABLE_FIREWALL)); then
   if ((NEW_FIREWALL)); then
@@ -311,6 +324,7 @@ scripts/backup.sh >/dev/null
 
 DOMAIN="$(env_value DOMAIN)"
 printf '\n%b更新完成%b\n' "$green" "$reset"
+printf '服务端版本: v%s\n' "$DEPLOYED_VERSION"
 printf '后台地址: https://%s/%s/\n' "$DOMAIN" "$ADMIN_PATH"
 printf 'TCP 保护端口: %s\n' "$TCP_PORTS"
 printf 'UDP 保护端口: %s\n' "${UDP_PORTS:-无}"

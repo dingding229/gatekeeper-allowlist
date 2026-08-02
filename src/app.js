@@ -32,6 +32,7 @@ export function createApp({ db, config, services = {} }) {
 
   app.get("/health", (_req, res) => {
     repository.checkHealth();
+    res.set("Cache-Control", "no-store");
     res.json({ ok: true, version: SERVER_VERSION });
   });
 

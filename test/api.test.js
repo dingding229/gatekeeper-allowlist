@@ -52,6 +52,7 @@ test("health endpoint exposes the server version", async (t) => {
   const { baseUrl } = await startTestApp(t);
   const response = await fetch(`${baseUrl}/health`);
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(await response.json(), {
     ok: true,
     version: SERVER_VERSION,
