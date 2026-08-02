@@ -373,6 +373,16 @@ header {
 .ip-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
+}
+.ip-table td:nth-child(1) {
+  width: 62px;
+}
+.ip-table td:nth-child(3) {
+  width: 160px;
+}
+.ip-table td:nth-child(4) {
+  width: 56px;
 }
 .ip-table td {
   padding: 10px;
@@ -448,8 +458,10 @@ header {
   color: var(--muted);
 }
 .device-row {
-  grid-template-columns: minmax(130px, 170px) minmax(0, 1fr) 110px max-content;
+  grid-template-columns: minmax(130px, 170px) minmax(0, 1fr) 140px max-content;
   align-items: center;
+  padding-right: 10px;
+  padding-left: 73px;
 }
 .device-meta {
   min-width: 0;
@@ -635,6 +647,10 @@ dialog form,
   }
   .audit-row {
     grid-template-columns: 1fr;
+  }
+  .device-row {
+    padding-right: 24px;
+    padding-left: 24px;
   }
   .audit-row time {
     display: none;

@@ -17,8 +17,10 @@ test("device rows expose complete IDs and reserve a removal column", () => {
   assert.doesNotMatch(renderSource, /device_key\.slice/);
   assert.match(
     styles,
-    /\.device-row\s*\{[^}]*grid-template-columns:\s*minmax\(130px, 170px\)\s+minmax\(0, 1fr\)\s+110px\s+max-content/s,
+    /\.device-row\s*\{[^}]*grid-template-columns:\s*minmax\(130px, 170px\)\s+minmax\(0, 1fr\)\s+140px\s+max-content/s,
   );
+  assert.match(styles, /\.device-row\s*\{[^}]*padding-left:\s*73px/s);
+  assert.match(styles, /\.ip-table\s*\{[^}]*table-layout:\s*fixed/s);
   assert.match(styles, /\.device-id\s*\{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(
     styles,
