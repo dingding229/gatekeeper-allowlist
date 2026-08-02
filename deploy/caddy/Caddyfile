@@ -1,0 +1,15 @@
+{
+    email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+    encode zstd gzip
+
+    @internal path /api/internal/*
+    respond @internal 404
+
+    reverse_proxy gatekeeper:8787 {
+        # Never trust a client-supplied forwarding chain.
+        header_up X-Forwarded-For {http.request.remote.host}
+    }
+}

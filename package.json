@@ -1,0 +1,25 @@
+{
+  "name": "gatekeeper-allowlist",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-user server IP allowlist manager with FIFO rotation",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "check:syntax": "find src public/js test -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "check": "npm run check:syntax && npm run format:check && npm test",
+    "format": "prettier --write 'public/**/*.{html,css,js}' 'src/**/*.js' 'test/**/*.js'",
+    "format:check": "prettier --check 'public/**/*.{html,css,js}' 'src/**/*.js' 'test/**/*.js'"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
+}

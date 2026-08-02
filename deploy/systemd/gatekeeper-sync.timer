@@ -1,0 +1,11 @@
+[Unit]
+Description=Synchronize Gatekeeper IPs every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=gatekeeper-sync.service
+
+[Install]
+WantedBy=timers.target

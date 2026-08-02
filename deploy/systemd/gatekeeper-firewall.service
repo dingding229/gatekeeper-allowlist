@@ -1,0 +1,15 @@
+[Unit]
+Description=Load Gatekeeper nftables SSH policy
+After=network-online.target
+Wants=network-online.target
+Before=gatekeeper-sync.service
+ConditionPathExists=/etc/gatekeeper/gatekeeper.nft
+
+[Service]
+Type=oneshot
+ExecStartPre=-/usr/sbin/nft delete table inet gatekeeper
+ExecStart=/usr/sbin/nft -f /etc/gatekeeper/gatekeeper.nft
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

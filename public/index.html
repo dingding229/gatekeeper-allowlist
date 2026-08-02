@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Gatekeeper · IP 白名单</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section id="loginView" class="login-card">
+        <div class="mark">G</div>
+        <p class="eyebrow">SERVER ACCESS CONTROL</p>
+        <h1>Gatekeeper</h1>
+        <p class="muted">管理服务器访问白名单</p>
+        <form id="loginForm">
+          <label
+            >管理员账号<input name="username" autocomplete="username" required
+          /></label>
+          <label
+            >管理员密码<input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+          /></label>
+          <button class="primary" type="submit">
+            进入控制台 <span>→</span>
+          </button>
+          <p id="loginError" class="error" role="alert"></p>
+        </form>
+      </section>
+
+      <section id="dashboard" class="dashboard hidden">
+        <header>
+          <div class="brand">
+            <span class="mark small">G</span>
+            <div><strong>Gatekeeper</strong><small>白名单控制台</small></div>
+          </div>
+          <div class="header-actions">
+            <span class="live"><i></i> 服务运行中</span
+            ><button id="logoutBtn" class="ghost">退出</button>
+          </div>
+        </header>
+
+        <div class="hero">
+          <div>
+            <p class="eyebrow">OVERVIEW</p>
+            <h1>访问白名单</h1>
+            <p class="muted">每个 API Key 保留最近添加的 3 个 IP</p>
+          </div>
+          <button id="newUserBtn" class="primary">＋ 创建用户</button>
+        </div>
+
+        <div class="stats">
+          <article>
+            <span>用户总数</span><strong id="statUsers">—</strong
+            ><small>已创建的访问密钥</small>
+          </article>
+          <article>
+            <span>启用用户</span><strong id="statActive">—</strong
+            ><small>当前可调用 API</small>
+          </article>
+          <article>
+            <span>生效 IP</span><strong id="statIps">—</strong
+            ><small>跨全部用户</small>
+          </article>
+          <article class="capacity">
+            <span>单用户容量</span><strong>3 <em>IP</em></strong
+            ><small>先进先出自动轮换</small>
+          </article>
+        </div>
+
+        <nav class="tabs">
+          <button class="active" data-tab="users">用户与 IP</button
+          ><button data-tab="audit">操作记录</button
+          ><button data-tab="api">API 使用</button>
+        </nav>
+
+        <section id="usersTab" class="panel tab-content">
+          <div class="panel-head">
+            <div>
+              <h2>用户列表</h2>
+              <p>查看密钥状态与当前白名单</p>
+            </div>
+            <input
+              id="searchInput"
+              class="search"
+              placeholder="搜索用户或 IP…"
+            />
+          </div>
+          <div id="userList" class="user-list"></div>
+        </section>
+
+        <section id="auditTab" class="panel tab-content hidden">
+          <div class="panel-head">
+            <div>
+              <h2>操作记录</h2>
+              <p>最近 50 条白名单变更</p>
+            </div>
+          </div>
+          <div id="auditList" class="audit-list"></div>
+        </section>
+
+        <section id="apiTab" class="panel tab-content hidden">
+          <div class="panel-head">
+            <div>
+              <h2>API 使用</h2>
+              <p>客户端可自动上报当前出口 IP，也可指定 IP</p>
+            </div>
+          </div>
+          <div class="docs">
+            <h3>上报请求</h3>
+            <pre><code>curl -X POST https://你的域名/api/v1/whitelist \
+  -H "Authorization: Bearer awl_你的密钥" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"server-01"}'</code></pre>
+            <p>
+              不传 <code>ip</code> 时自动使用请求的来源地址。指定地址时传入
+              <code>{"ip":"203.0.113.8"}</code>。
+            </p>
+            <h3>查询当前 Key 的 IP</h3>
+            <pre><code>curl https://你的域名/api/v1/whitelist \
+  -H "X-API-Key: awl_你的密钥"</code></pre>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="userDialog">
+      <form id="userForm" method="dialog">
+        <button class="dialog-x" value="cancel" aria-label="关闭">×</button>
+        <p class="eyebrow">NEW ACCESS KEY</p>
+        <h2>创建用户</h2>
+        <p class="muted">创建后 API Key 只显示一次。</p>
+        <label
+          >用户名称<input
+            name="name"
+            maxlength="64"
+            placeholder="例如：张三 / 办公室电脑"
+            required
+            autofocus
+        /></label>
+        <div class="dialog-actions">
+          <button value="cancel" class="ghost">取消</button
+          ><button class="primary" value="default">创建用户</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="keyDialog">
+      <div class="key-result">
+        <button class="dialog-x" data-close aria-label="关闭">×</button>
+        <div class="success-icon">✓</div>
+        <h2>API Key 已生成</h2>
+        <p class="muted">请立即复制保存，关闭后将无法再次查看。</p>
+        <div class="key-box">
+          <code id="newKey"></code><button id="copyKey">复制</button>
+        </div>
+        <button class="primary full" data-close>我已保存</button>
+      </div>
+    </dialog>
+    <div id="toast" class="toast"></div>
+    <script src="/js/app.js" type="module"></script>
+  </body>
+</html>
