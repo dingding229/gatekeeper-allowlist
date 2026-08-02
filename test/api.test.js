@@ -247,9 +247,9 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   const moduleResponse = await fetch(`${baseUrl}${moduleUrl.pathname}`);
   assert.equal(moduleResponse.status, 200);
   const moduleText = await moduleResponse.text();
-  assert.match(moduleText, /#!arguments=interval:"10"/);
+  assert.doesNotMatch(moduleText, /#!arguments=.*interval/);
   assert.doesNotMatch(moduleText, /device=\{\{\{device\}\}\}/);
-  assert.match(moduleText, /cronexp="\*\/\{\{\{interval\}\}\}/);
+  assert.match(moduleText, /cronexp="\*\/10 \* \* \* \*"/);
   assert.match(moduleText, /cooldown=1/);
   assert.match(moduleText, /script-update-interval=300/);
   assert.match(moduleText, /\[Panel\]/);
