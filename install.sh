@@ -84,6 +84,12 @@ ensure_docker_images() {
 }
 
 [[ $EUID -eq 0 ]] || fail "请使用 root 运行：curl -fsSL https://raw.githubusercontent.com/$REPOSITORY/$BRANCH/install.sh | sudo bash"
+[[ "$INSTALL_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] || fail "安装目录只能使用绝对路径及字母、数字、点、下划线、斜杠和连字符"
+case "$INSTALL_DIR" in
+  / | /opt | /usr | /etc | /var | /home | /root | /tmp | *"/../"* | *"/.." | *"/./"*)
+    fail "安装目录范围过大或包含不安全路径：$INSTALL_DIR"
+    ;;
+esac
 [[ -r /etc/os-release ]] || fail "无法识别操作系统"
 source /etc/os-release
 [[ "${ID:-}" == "debian" && "${VERSION_ID:-}" == "12" ]] || fail "此脚本仅支持 Debian 12"
@@ -149,7 +155,7 @@ done
 INITIAL_USER="$(prompt '初始 API Key 名称' 'initial-device')"
 [[ -n "$INITIAL_USER" && ${#INITIAL_USER} -le 64 ]] || fail "初始名称无效"
 ENABLE_FIREWALL=0
-if confirm "是否立即启用 SSH IP 白名单保护？" y; then ENABLE_FIREWALL=1; fi
+if confirm "是否立即启用 nftables 网段白名单保护？" y; then ENABLE_FIREWALL=1; fi
 
 if [[ -e "$INSTALL_DIR/.install-complete" ]]; then
   fail "$INSTALL_DIR 已是完整部署。为保护数据，本脚本不会覆盖现有安装"
@@ -196,10 +202,12 @@ else
   info "下载 Gatekeeper 源码"
   TEMP_DIR="$(mktemp -d)"
   trap 'rm -rf "$TEMP_DIR"' EXIT
-  curl -fsSL "https://github.com/$REPOSITORY/archive/refs/heads/$BRANCH.tar.gz" \
+  curl --retry 3 --retry-delay 2 -fsSL "https://github.com/$REPOSITORY/archive/refs/heads/$BRANCH.tar.gz" \
     | tar -xz -C "$TEMP_DIR" --strip-components=1
   SOURCE_DIR="$TEMP_DIR"
 fi
+[[ -x "$SOURCE_DIR/scripts/render-nftables.sh" && -x "$SOURCE_DIR/scripts/install-nftables-config.sh" ]] \
+  || fail "源码缺少防火墙安装脚本"
 
 info "安装到 $INSTALL_DIR"
 install -d -m 0755 "$INSTALL_DIR"
@@ -220,7 +228,7 @@ TRUST_PROXY=1
 COOKIE_SECURE=1
 EOF
 chmod 600 .env
-chmod 755 scripts/sync-nftables.sh scripts/render-nftables.sh
+chmod 755 scripts/*.sh
 
 info "构建并启动 Gatekeeper 与 Caddy"
 docker compose up -d --build
@@ -239,8 +247,7 @@ INITIAL_API_KEY="$(printf '%s' "$BOOTSTRAP_JSON" | jq -er .apiKey)"
 INITIAL_NETWORK="$(printf '%s' "$BOOTSTRAP_JSON" | jq -er .ip)"
 
 if ((ENABLE_FIREWALL)); then
-  info "配置 nftables SSH 白名单"
-  install -d -m 0700 "$CONFIG_DIR"
+  info "配置 nftables 网段白名单"
   if [[ "$INITIAL_NETWORK" == *:* ]]; then
     INITIAL_IPV4=""
     INITIAL_IPV6="$INITIAL_NETWORK"
@@ -248,11 +255,10 @@ if ((ENABLE_FIREWALL)); then
     INITIAL_IPV4="$INITIAL_NETWORK"
     INITIAL_IPV6=""
   fi
-  scripts/render-nftables.sh \
+  scripts/install-nftables-config.sh \
     deploy/nftables/gatekeeper.nft.template \
-    "$INITIAL_IPV4" "$INITIAL_IPV6" "$SSH_PORT" "" \
-    >"$CONFIG_DIR/gatekeeper.nft"
-  nft -c -f "$CONFIG_DIR/gatekeeper.nft"
+    "$CONFIG_DIR/gatekeeper.nft" \
+    "$INITIAL_IPV4" "$INITIAL_IPV6" "$SSH_PORT" ""
 
   cat >"$CONFIG_DIR/gatekeeper-sync.env" <<EOF
 ALLOWLIST_URL=http://127.0.0.1:8787
@@ -261,17 +267,25 @@ NFT_TABLE=gatekeeper
 EOF
   chmod 600 "$CONFIG_DIR/gatekeeper-sync.env"
   install -m 0644 deploy/systemd/gatekeeper-firewall.service /etc/systemd/system/
-  install -m 0644 deploy/systemd/gatekeeper-sync.service /etc/systemd/system/
+  sed "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
+    deploy/systemd/gatekeeper-sync.service \
+    > /etc/systemd/system/gatekeeper-sync.service
+  chmod 0644 /etc/systemd/system/gatekeeper-sync.service
   install -m 0644 deploy/systemd/gatekeeper-sync.timer /etc/systemd/system/
   systemctl daemon-reload
-  systemctl enable --now gatekeeper-firewall.service
+  systemctl enable gatekeeper-firewall.service
+  systemctl restart gatekeeper-firewall.service
   systemctl start gatekeeper-sync.service
   systemctl enable --now gatekeeper-sync.timer
+  systemctl is-active --quiet gatekeeper-firewall.service || fail "防火墙服务未运行"
+  systemctl is-active --quiet gatekeeper-sync.timer || fail "同步定时器未运行"
+  nft list table inet gatekeeper >/dev/null || fail "nftables 规则表未加载"
+  scripts/firewall-doctor.sh || fail "防火墙自检失败"
 fi
 
 touch "$INSTALL_DIR/.install-complete"
 
-printf '\n%s部署完成%s\n' "$green" "$reset"
+printf '\n%b部署完成%b\n' "$green" "$reset"
 printf '后台地址: https://%s/%s/\n' "$DOMAIN" "$ADMIN_PATH"
 printf '管理员账号: %s\n' "$ADMIN_USERNAME"
 printf '初始用户: %s\n' "$INITIAL_USER"

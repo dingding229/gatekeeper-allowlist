@@ -1,11 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const template = readFileSync(
   new URL("../deploy/nftables/gatekeeper.nft.template", import.meta.url),
+  "utf8",
+);
+const syncService = readFileSync(
+  new URL("../deploy/systemd/gatekeeper-sync.service", import.meta.url),
   "utf8",
 );
 
@@ -40,4 +53,39 @@ test("nftables renderer places semicolons outside populated sets", () => {
   assert.doesNotMatch(rendered, /elements\s*=\s*\{[^}\n]*;\s*}/);
   assert.doesNotMatch(rendered, /elements\s*=\s*\{\s*\}/);
   assert.doesNotMatch(rendered, /__INITIAL_/);
+});
+
+test("systemd sync service requires the firewall and supports custom paths", () => {
+  assert.match(syncService, /Requires=gatekeeper-firewall\.service/);
+  assert.match(
+    syncService,
+    /ExecStart=__INSTALL_DIR__\/scripts\/sync-nftables\.sh/,
+  );
+});
+
+test("nftables installer validates then atomically writes the config", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "gatekeeper-nft-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const fakeBin = join(directory, "bin");
+  const output = join(directory, "config", "gatekeeper.nft");
+  const installScript = fileURLToPath(
+    new URL("../scripts/install-nftables-config.sh", import.meta.url),
+  );
+  const templatePath = fileURLToPath(
+    new URL("../deploy/nftables/gatekeeper.nft.template", import.meta.url),
+  );
+  mkdirSync(fakeBin, { recursive: true });
+  const fakeNft = join(fakeBin, "nft");
+  writeFileSync(fakeNft, "#!/bin/sh\nexit 0\n");
+  chmodSync(fakeNft, 0o755);
+
+  execFileSync(
+    installScript,
+    [templatePath, output, "203.0.113.0/24", "", "6900", ""],
+    { env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}` } },
+  );
+  const installed = readFileSync(output, "utf8");
+  assert.match(installed, /elements = \{ 203\.0\.113\.0\/24 \};/);
+  assert.match(installed, /elements = \{ 6900 \};/);
+  assert.doesNotMatch(installed, /__INITIAL_/);
 });

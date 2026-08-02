@@ -2,9 +2,10 @@
 Description=Synchronize Gatekeeper IPs to nftables
 After=network-online.target docker.service gatekeeper-firewall.service
 Wants=network-online.target
+Requires=gatekeeper-firewall.service
 ConditionPathExists=/etc/gatekeeper/gatekeeper-sync.env
 
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/gatekeeper/gatekeeper-sync.env
-ExecStart=/opt/gatekeeper/scripts/sync-nftables.sh
+ExecStart=__INSTALL_DIR__/scripts/sync-nftables.sh

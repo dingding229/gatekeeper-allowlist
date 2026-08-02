@@ -60,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/update.sh | sudo bash
 ```
 
-更新脚本会保留数据库、API Key、`.env` 和 HTTPS 证书，并在 SSH 中询问后台路径、TCP 保护端口和 UDP 保护端口。端口支持逗号及范围，例如 `22,443,8000-9000`。如果旧安装没有启用 nftables，脚本会主动询问是否启用，并在加载规则前确认当前 SSH 网段已经在白名单中。
+更新脚本会保留数据库、API Key、`.env` 和 HTTPS 证书，并默认保留已有 TCP/UDP 保护范围。端口支持逗号及范围，例如 `22,443,8000-9000`；输入 `none` 可清空。如果旧安装没有启用 nftables，脚本会主动询问是否启用，并在加载规则前确认当前 SSH 网段已经在白名单中。脚本使用临时文件生成并检查规则，检查通过后才会原子替换正式配置，最后强制验证 systemd、同步任务和 nftables 规则表。
 
 ## 使用 API
 
@@ -118,6 +118,9 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 # 检查防火墙同步
 systemctl status gatekeeper-sync.timer
 journalctl -u gatekeeper-sync.service -n 50 --no-pager
+
+# 一键诊断防火墙、同步接口和当前端口范围
+sudo /opt/gatekeeper/scripts/firewall-doctor.sh
 ```
 
 数据保存在 Docker 命名卷中。不要执行 `docker compose down -v`，否则会删除数据库和 HTTPS 证书数据。

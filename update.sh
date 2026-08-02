@@ -16,6 +16,41 @@ info() { printf "${green}==>${reset} %s\n" "$*"; }
 warn() { printf "${yellow}警告:${reset} %s\n" "$*" >&2; }
 fail() { printf "${red}错误:${reset} %s\n" "$*" >&2; exit 1; }
 
+validate_port_ranges() {
+  python3 - "$1" <<'PY'
+import re, sys
+value = sys.argv[1].strip()
+if not value:
+    raise SystemExit(0)
+for token in re.split(r"[,，\s]+", value):
+    if not token:
+        continue
+    match = re.fullmatch(r"(\d{1,5})(?:-(\d{1,5}))?", token)
+    if not match:
+        raise SystemExit(1)
+    start = int(match.group(1))
+    end = int(match.group(2) or start)
+    if start < 1 or end > 65535 or start > end:
+        raise SystemExit(1)
+PY
+}
+
+port_is_covered() {
+  python3 - "$1" "$2" <<'PY'
+import re, sys
+port = int(sys.argv[1])
+for token in re.split(r"[,，\s]+", sys.argv[2].strip()):
+    if not token:
+        continue
+    values = token.split("-", 1)
+    start = int(values[0])
+    end = int(values[-1])
+    if start <= port <= end:
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 prompt() {
   local message="$1" default="${2:-}" value
   read -r -p "$message${default:+ [$default]}: " value <"$TTY"
@@ -57,8 +92,17 @@ source /etc/os-release
 [[ "${ID:-}" == "debian" && "${VERSION_ID:-}" == "12" ]] || fail "此脚本仅支持 Debian 12"
 [[ -r "$TTY" ]] || fail "需要交互式 SSH 终端"
 [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/compose.yaml" ]] || fail "未找到 $INSTALL_DIR 中的现有部署"
+[[ "$INSTALL_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] || fail "安装目录只能使用绝对路径及字母、数字、点、下划线、斜杠和连字符"
+case "$INSTALL_DIR" in
+  / | /opt | /usr | /etc | /var | /home | /root | /tmp | *"/../"* | *"/.." | *"/./"*)
+    fail "安装目录范围过大或包含不安全路径：$INSTALL_DIR"
+    ;;
+esac
 command -v docker >/dev/null 2>&1 || fail "未安装 Docker"
 docker compose version >/dev/null 2>&1 || fail "未安装 Docker Compose 插件"
+command -v nft >/dev/null 2>&1 || fail "未安装 nftables"
+command -v jq >/dev/null 2>&1 || fail "未安装 jq"
+command -v python3 >/dev/null 2>&1 || fail "未安装 python3"
 
 printf '\nGatekeeper Debian 12 一键更新\n\n'
 
@@ -85,27 +129,61 @@ else
 fi
 
 DETECTED_SSH_PORT="$(sshd -T 2>/dev/null | awk '$1 == "port" { print $2; exit }' || true)"
+DEFAULT_TCP_PORTS="${DETECTED_SSH_PORT:-22}"
+DEFAULT_UDP_PORTS=""
+EXISTING_TOKEN="$(env_value FIREWALL_SYNC_TOKEN)"
+if [[ ${#EXISTING_TOKEN} -ge 24 ]]; then
+  EXISTING_SNAPSHOT="$(curl -fsS --max-time 5 \
+    -H "Authorization: Bearer $EXISTING_TOKEN" \
+    http://127.0.0.1:8787/api/internal/firewall-snapshot 2>/dev/null || true)"
+  if printf '%s' "$EXISTING_SNAPSHOT" | jq -e '.tcpPorts and .udpPorts' >/dev/null 2>&1; then
+    DEFAULT_TCP_PORTS="$(printf '%s' "$EXISTING_SNAPSHOT" | jq -r '.tcpPorts | join(",")')"
+    DEFAULT_UDP_PORTS="$(printf '%s' "$EXISTING_SNAPSHOT" | jq -r '.udpPorts | join(",")')"
+  fi
+fi
 while true; do
-  TCP_PORTS="$(prompt '受白名单保护的 TCP 端口（逗号分隔，支持 8000-9000）' "${DETECTED_SSH_PORT:-22}")"
-  [[ "$TCP_PORTS" =~ ^[0-9,[:space:]-]+$ ]] && break
-  warn "请输入端口或范围，例如 22,443,8000-9000"
+  TCP_PORTS="$(prompt '受白名单保护的 TCP 端口（输入 none 清空）' "${DEFAULT_TCP_PORTS:-无}")"
+  [[ "${TCP_PORTS,,}" == "none" || "$TCP_PORTS" == "无" ]] && TCP_PORTS=""
+  if ! validate_port_ranges "$TCP_PORTS"; then
+    warn "端口范围无效，例如 22,443,8000-9000"
+    continue
+  fi
+  PORTS_CONFIRMED=1
+  if ((ENABLE_FIREWALL)) && ! port_is_covered "${DETECTED_SSH_PORT:-22}" "$TCP_PORTS"; then
+    warn "SSH 端口 ${DETECTED_SSH_PORT:-22} 不在 TCP 保护范围中，将可被任意来源访问"
+    confirm "确认继续？" n || PORTS_CONFIRMED=0
+  fi
+  for public_port in 80 443; do
+    if port_is_covered "$public_port" "$TCP_PORTS"; then
+      warn "TCP $public_port 被加入保护范围，未加白设备将无法访问后台和 API"
+      confirm "确认仍要保护 TCP $public_port？" n || PORTS_CONFIRMED=0
+    fi
+  done
+  ((PORTS_CONFIRMED)) && break
+  warn "请重新填写 TCP 保护范围"
 done
 while true; do
-  UDP_PORTS="$(prompt '受白名单保护的 UDP 端口（留空表示无）' '')"
-  [[ -z "$UDP_PORTS" || "$UDP_PORTS" =~ ^[0-9,[:space:]-]+$ ]] && break
-  warn "请输入端口或范围，例如 53,6000-7000"
+  UDP_PORTS="$(prompt '受白名单保护的 UDP 端口（输入 none 清空）' "${DEFAULT_UDP_PORTS:-无}")"
+  [[ "${UDP_PORTS,,}" == "none" || "$UDP_PORTS" == "无" ]] && UDP_PORTS=""
+  validate_port_ranges "$UDP_PORTS" && break
+  warn "端口范围无效，例如 53,6000-7000"
 done
 
 info "下载最新源码"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
-curl -fsSL "https://github.com/$REPOSITORY/archive/refs/heads/$BRANCH.tar.gz" \
+curl --retry 3 --retry-delay 2 -fsSL "https://github.com/$REPOSITORY/archive/refs/heads/$BRANCH.tar.gz" \
   | tar -xz -C "$TEMP_DIR" --strip-components=1
+[[ -x "$TEMP_DIR/scripts/render-nftables.sh" \
+  && -x "$TEMP_DIR/scripts/install-nftables-config.sh" \
+  && -x "$TEMP_DIR/scripts/firewall-doctor.sh" \
+  && -f "$TEMP_DIR/deploy/nftables/gatekeeper.nft.template" ]] \
+  || fail "下载的源码不完整"
 
 info "更新程序文件（保留数据库、证书和 .env）"
 cp -a "$TEMP_DIR/." "$INSTALL_DIR/"
 set_env_value ADMIN_PATH "/$ADMIN_PATH"
-chmod 755 "$INSTALL_DIR/scripts/sync-nftables.sh" "$INSTALL_DIR/scripts/render-nftables.sh"
+chmod 755 "$INSTALL_DIR/scripts/"*.sh
 cd "$INSTALL_DIR"
 
 info "重新构建并启动服务"
@@ -119,26 +197,20 @@ curl -fsS http://127.0.0.1:8787/health >/dev/null || {
   fail "Gatekeeper 启动失败"
 }
 
-info "保存受保护端口范围"
-docker compose exec -T gatekeeper node src/cli.js set-firewall "$TCP_PORTS" "$UDP_PORTS" >/dev/null
-
 if ((ENABLE_FIREWALL)); then
-  info "升级 nftables 规则并同步网段与端口"
   if ((NEW_FIREWALL)); then
     FIREWALL_SYNC_TOKEN="$(env_value FIREWALL_SYNC_TOKEN)"
-    [[ ${#FIREWALL_SYNC_TOKEN} -ge 24 ]] || fail "现有 .env 缺少有效的 FIREWALL_SYNC_TOKEN"
     ALLOWLIST_URL="http://127.0.0.1:8787"
   else
     # shellcheck disable=SC1090
     source "$CONFIG_DIR/gatekeeper-sync.env"
   fi
-  SNAPSHOT="$(curl -fsS --max-time 10 \
+  FIREWALL_SYNC_TOKEN="${FIREWALL_SYNC_TOKEN:-}"
+  ALLOWLIST_URL="${ALLOWLIST_URL:-http://127.0.0.1:8787}"
+  [[ ${#FIREWALL_SYNC_TOKEN} -ge 24 ]] || fail "缺少有效的 FIREWALL_SYNC_TOKEN"
+  SAFETY_SNAPSHOT="$(curl -fsS --max-time 10 \
     -H "Authorization: Bearer $FIREWALL_SYNC_TOKEN" \
-    "${ALLOWLIST_URL:-http://127.0.0.1:8787}/api/internal/firewall-snapshot")"
-  IPV4="$(printf '%s' "$SNAPSHOT" | jq -er '.ipv4 | join(", ")')"
-  IPV6="$(printf '%s' "$SNAPSHOT" | jq -er '.ipv6 | join(", ")')"
-  TCP_ELEMENTS="$(printf '%s' "$SNAPSHOT" | jq -er '.tcpPorts | join(", ")')"
-  UDP_ELEMENTS="$(printf '%s' "$SNAPSHOT" | jq -er '.udpPorts | join(", ")')"
+    "$ALLOWLIST_URL/api/internal/firewall-snapshot")"
 
   SSH_CONNECTION_VALUE="${SSH_CONNECTION:-}"
   CURRENT_IP="${SSH_CONNECTION_VALUE%% *}"
@@ -151,20 +223,32 @@ if ((ENABLE_FIREWALL)); then
   CURRENT_NETWORK="$(printf '%s' "$CURRENT_NETWORK_JSON" | jq -er .network)"
   CURRENT_FAMILY="$(printf '%s' "$CURRENT_NETWORK_JSON" | jq -er .family)"
   if [[ "$CURRENT_FAMILY" == "4" ]]; then
-    CURRENT_ALLOWED="$(printf '%s' "$SNAPSHOT" | jq -r --arg network "$CURRENT_NETWORK" '.ipv4 | index($network) != null')"
+    CURRENT_ALLOWED="$(printf '%s' "$SAFETY_SNAPSHOT" | jq -r --arg network "$CURRENT_NETWORK" '.ipv4 | index($network) != null')"
   else
-    CURRENT_ALLOWED="$(printf '%s' "$SNAPSHOT" | jq -r --arg network "$CURRENT_NETWORK" '.ipv6 | index($network) != null')"
+    CURRENT_ALLOWED="$(printf '%s' "$SAFETY_SNAPSHOT" | jq -r --arg network "$CURRENT_NETWORK" '.ipv6 | index($network) != null')"
   fi
   if [[ "$CURRENT_ALLOWED" != "true" ]]; then
     fail "当前 SSH 网段 $CURRENT_NETWORK 不在白名单中。请先用 API Key 上报当前 IP，再重新运行更新脚本"
   fi
+fi
 
-  install -d -m 0700 "$CONFIG_DIR"
-  scripts/render-nftables.sh \
+info "保存受保护端口范围"
+docker compose exec -T gatekeeper node src/cli.js set-firewall "$TCP_PORTS" "$UDP_PORTS" >/dev/null
+
+if ((ENABLE_FIREWALL)); then
+  info "升级 nftables 规则并同步网段与端口"
+  SNAPSHOT="$(curl -fsS --max-time 10 \
+    -H "Authorization: Bearer $FIREWALL_SYNC_TOKEN" \
+    "$ALLOWLIST_URL/api/internal/firewall-snapshot")"
+  IPV4="$(printf '%s' "$SNAPSHOT" | jq -er '.ipv4 | join(", ")')"
+  IPV6="$(printf '%s' "$SNAPSHOT" | jq -er '.ipv6 | join(", ")')"
+  TCP_ELEMENTS="$(printf '%s' "$SNAPSHOT" | jq -er '.tcpPorts | join(", ")')"
+  UDP_ELEMENTS="$(printf '%s' "$SNAPSHOT" | jq -er '.udpPorts | join(", ")')"
+
+  scripts/install-nftables-config.sh \
     deploy/nftables/gatekeeper.nft.template \
-    "$IPV4" "$IPV6" "$TCP_ELEMENTS" "$UDP_ELEMENTS" \
-    >"$CONFIG_DIR/gatekeeper.nft"
-  nft -c -f "$CONFIG_DIR/gatekeeper.nft"
+    "$CONFIG_DIR/gatekeeper.nft" \
+    "$IPV4" "$IPV6" "$TCP_ELEMENTS" "$UDP_ELEMENTS"
   if ((NEW_FIREWALL)); then
     cat >"$CONFIG_DIR/gatekeeper-sync.env" <<EOF
 ALLOWLIST_URL=http://127.0.0.1:8787
@@ -174,16 +258,24 @@ EOF
     chmod 600 "$CONFIG_DIR/gatekeeper-sync.env"
   fi
   install -m 0644 deploy/systemd/gatekeeper-firewall.service /etc/systemd/system/
-  install -m 0644 deploy/systemd/gatekeeper-sync.service /etc/systemd/system/
+  sed "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
+    deploy/systemd/gatekeeper-sync.service \
+    > /etc/systemd/system/gatekeeper-sync.service
+  chmod 0644 /etc/systemd/system/gatekeeper-sync.service
   install -m 0644 deploy/systemd/gatekeeper-sync.timer /etc/systemd/system/
   systemctl daemon-reload
-  systemctl enable --now gatekeeper-firewall.service
+  systemctl enable gatekeeper-firewall.service
+  systemctl restart gatekeeper-firewall.service
   systemctl start gatekeeper-sync.service
   systemctl enable --now gatekeeper-sync.timer
+  systemctl is-active --quiet gatekeeper-firewall.service || fail "防火墙服务未运行"
+  systemctl is-active --quiet gatekeeper-sync.timer || fail "同步定时器未运行"
+  nft list table inet gatekeeper >/dev/null || fail "nftables 规则表未加载"
+  scripts/firewall-doctor.sh || fail "防火墙自检失败"
 fi
 
 DOMAIN="$(env_value DOMAIN)"
-printf '\n%s更新完成%s\n' "$green" "$reset"
+printf '\n%b更新完成%b\n' "$green" "$reset"
 printf '后台地址: https://%s/%s/\n' "$DOMAIN" "$ADMIN_PATH"
 printf 'TCP 保护端口: %s\n' "$TCP_PORTS"
 printf 'UDP 保护端口: %s\n' "${UDP_PORTS:-无}"

@@ -9,7 +9,8 @@
     "dev": "node --watch src/server.js",
     "test": "node --test",
     "check:syntax": "find src public/js test -name '*.js' -print0 | xargs -0 -n1 node --check",
-    "check": "npm run check:syntax && npm run format:check && npm test",
+    "check:shell": "bash -n install.sh update.sh && sh -n scripts/*.sh",
+    "check": "npm run check:syntax && npm run check:shell && npm run format:check && npm test",
     "format": "prettier --write 'public/**/*.{html,css,js}' 'src/**/*.js' 'test/**/*.js'",
     "format:check": "prettier --check 'public/**/*.{html,css,js}' 'src/**/*.js' 'test/**/*.js'"
   },

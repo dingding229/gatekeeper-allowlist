@@ -5,6 +5,7 @@ Description=Synchronize Gatekeeper IPs every minute
 OnBootSec=30s
 OnUnitActiveSec=60s
 AccuracySec=5s
+Persistent=true
 Unit=gatekeeper-sync.service
 
 [Install]
