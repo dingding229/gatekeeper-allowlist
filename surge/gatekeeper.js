@@ -54,6 +54,23 @@ function apiFailureReason(error, data) {
   return "Gatekeeper 暂时无法处理请求，请稍后重试";
 }
 
+function sameAllowedNetwork(left, right) {
+  if (!left || !right) return false;
+  left = String(left).trim().toLowerCase();
+  right = String(right).trim().toLowerCase();
+  if (left === right) return true;
+  if (left.slice(-3) !== "/24" && right.slice(-3) !== "/24") return false;
+  var leftParts = left.replace("/24", "").split(".");
+  var rightParts = right.replace("/24", "").split(".");
+  return (
+    leftParts.length === 4 &&
+    rightParts.length === 4 &&
+    leftParts[0] === rightParts[0] &&
+    leftParts[1] === rightParts[1] &&
+    leftParts[2] === rightParts[2]
+  );
+}
+
 if (
   !/^https:\/\//i.test(baseUrl) ||
   (apiKey.indexOf("awl_") !== 0 && apiKey.indexOf("sg_") !== 0)
@@ -88,7 +105,6 @@ if (
         deviceName: deviceName,
       };
       if (ipInfo && ipInfo.ip) {
-        payload.ip = ipInfo.ip;
         payload.ipInfo = ipInfo;
       }
       $httpClient.post(
@@ -138,6 +154,23 @@ if (
                 return typeof item === "string" ? item : item.ip;
               })
             : [];
+          var applied = networks.some(function (network) {
+            return sameAllowedNetwork(network, data.ip);
+          });
+          if (!applied) {
+            var notAppliedReason =
+              "当前网段 " +
+              String(data.ip || "未知") +
+              " 未出现在服务器返回的白名单中";
+            $persistentStore.write("0", NEXT_REPORT_KEY);
+            $notification.post(
+              "Gatekeeper 自动加白",
+              "加白未生效",
+              notAppliedReason,
+            );
+            finish("Gatekeeper：加白未生效", notAppliedReason, false);
+            return;
+          }
           var title =
             "Gatekeeper " + data.slots + "/" + data.limit + " · " + data.ip;
           var content =

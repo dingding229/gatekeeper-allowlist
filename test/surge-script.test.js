@@ -66,7 +66,7 @@ function runSurge({
               limit: 3,
               ip: "8.8.8.0/24",
               rateLimitSeconds: 30,
-              ips: [],
+              ips: [{ ip: "8.8.8.0/24" }],
             },
           ),
         );
@@ -109,7 +109,7 @@ test("Surge learns the current server cooldown after a successful report", () =>
         limit: 3,
         ip: "8.8.8.0/24",
         rateLimitSeconds: 90,
-        ips: [],
+        ips: [{ ip: "8.8.8.0/24" }],
       },
     },
   });
@@ -137,11 +137,12 @@ test("Surge submits on every trigger even when the public IP is unchanged", () =
   assert.equal(posts, 1);
 });
 
-test("Surge submits the IPCheck address and metadata", () => {
+test("Surge submits IPCheck metadata but trusts the request source IP", () => {
   const { posts, postOptions } = runSurge({ lookupIp: "8.8.8.8" });
   assert.equal(posts, 1);
   const payload = JSON.parse(postOptions.body);
-  assert.equal(payload.ip, "8.8.8.8");
+  assert.equal(payload.ip, undefined);
+  assert.equal(payload.ipInfo.ip, "8.8.8.8");
   assert.equal(payload.ipInfo.city, "Test");
 });
 
@@ -151,4 +152,23 @@ test("Surge still submits when public IP lookup fails", () => {
   const payload = JSON.parse(postOptions.body);
   assert.equal(payload.ip, undefined);
   assert.equal(payload.ipInfo, undefined);
+});
+
+test("Surge reports failure when the current network is absent from the returned whitelist", () => {
+  const { result } = runSurge({
+    postResponse: {
+      status: 200,
+      body: {
+        ok: true,
+        status: "existing",
+        slots: 1,
+        limit: 3,
+        ip: "8.8.8.0/24",
+        rateLimitSeconds: 30,
+        ips: [{ ip: "1.1.1.0/24" }],
+      },
+    },
+  });
+  assert.match(result.title, /加白未生效/);
+  assert.equal(result.style, "error");
 });

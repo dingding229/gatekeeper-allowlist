@@ -1,5 +1,5 @@
 const SCRIPT_URL =
-  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-6";
+  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-7";
 
 const safeLabel = (value) =>
   String(value || "user")
@@ -19,7 +19,7 @@ export function renderSurgeModule({
   const argument = `url=${encodeURIComponent(publicBaseUrl)}&key=${encodeURIComponent(token)}&cooldown=${Math.max(1, Math.ceil(cooldownSeconds))}&device={{{device}}}`;
 
   return `#!name=Gatekeeper - ${label}
-#!desc=${label} 专属网段自动加白；每次有效触发都上报，由服务端幂等处理重复网段。
+#!desc=${label} 专属网段自动加白；每次都上报并校验当前网段已出现在服务器白名单中。
 #!category=Gatekeeper
 #!author=dingding229
 #!arguments=interval:"3",device:"Surge"

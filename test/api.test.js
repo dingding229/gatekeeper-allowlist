@@ -54,6 +54,7 @@ test("empty API body uses the request source IP", async (t) => {
   assert.equal(response.status, 201);
   const body = await response.json();
   assert.equal(body.ip, "127.0.0.0/24");
+  assert.equal(body.applied, true);
   assert.equal(body.limit, 3);
 });
 

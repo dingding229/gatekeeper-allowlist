@@ -37,8 +37,10 @@ export function createAllowlistRouter({ repository, apiAuth }) {
       if (location)
         repository.updateHistoryLocation(result.historyId, location);
       const ips = repository.listUserIps(req.user.id);
+      const applied = ips.some((item) => item.ip === normalized.network);
       return res.status(result.status === "added" ? 201 : 200).json({
         ok: true,
+        applied,
         status: result.status,
         ip: normalized.network,
         evicted: result.evicted,
