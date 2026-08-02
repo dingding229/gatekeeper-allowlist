@@ -9,6 +9,17 @@ test("production config rejects the default password", () => {
   );
 });
 
+test("production config accepts a non-empty short admin password", () => {
+  assert.equal(
+    loadConfig({
+      NODE_ENV: "production",
+      ADMIN_PASSWORD: "x",
+      DOMAIN: "allowlist.example.com",
+    }).adminPassword,
+    "x",
+  );
+});
+
 test("config validates port and firewall token", () => {
   assert.throws(() => loadConfig({ PORT: "nope" }), /PORT must be an integer/);
   assert.throws(

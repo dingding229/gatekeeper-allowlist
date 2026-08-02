@@ -1,5 +1,5 @@
 const SCRIPT_URL =
-  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-2";
+  "https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=20260802-3";
 
 const safeLabel = (value) =>
   String(value || "user")
@@ -7,11 +7,16 @@ const safeLabel = (value) =>
     .trim()
     .slice(0, 48) || "user";
 
-export function renderSurgeModule({ user, publicBaseUrl, token }) {
+export function renderSurgeModule({
+  user,
+  publicBaseUrl,
+  token,
+  cooldownSeconds = 30,
+}) {
   const hostname = new URL(publicBaseUrl).hostname;
   const label = safeLabel(user.name);
   const suffix = user.id;
-  const argument = `url=${encodeURIComponent(publicBaseUrl)}&key=${encodeURIComponent(token)}`;
+  const argument = `url=${encodeURIComponent(publicBaseUrl)}&key=${encodeURIComponent(token)}&cooldown=${Math.max(1, Math.ceil(cooldownSeconds))}`;
 
   return `#!name=Gatekeeper - ${label}
 #!desc=${label} 专属网段自动加白；可配置上报周期，网络切换时更新，也可在策略页面手动刷新。

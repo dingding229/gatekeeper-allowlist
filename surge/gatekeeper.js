@@ -1,7 +1,5 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
-var STATE_KEY = "gatekeeper_allowlist_state";
-
 function argumentsFromSurge() {
   var result = {};
   var raw = typeof $argument === "string" ? $argument : "";
@@ -25,6 +23,25 @@ function finish(title, content, ok) {
 var config = argumentsFromSurge();
 var baseUrl = String(config.url || "").replace(/\/+$/, "");
 var apiKey = String(config.key || "");
+var keySuffix = apiKey.slice(-16).replace(/[^A-Za-z0-9_-]/g, "");
+var STATE_KEY = "gatekeeper_allowlist_state_" + keySuffix;
+var NEXT_REPORT_KEY = "gatekeeper_next_report_" + keySuffix;
+var cooldownSeconds = parseInt(config.cooldown || "30", 10);
+if (!isFinite(cooldownSeconds) || cooldownSeconds < 1) cooldownSeconds = 30;
+
+function apiFailureReason(error, data) {
+  if (error) return "网络连接失败，请检查 Gatekeeper 域名与直连规则";
+  var code = data && data.error;
+  if (code === "rate_limit_exceeded") {
+    return "请求过于频繁，请在 " + String(data.retryAfter || 1) + " 秒后重试";
+  }
+  if (code === "invalid_api_key" || code === "missing_api_key") {
+    return "模块授权已失效，请从后台重新获取并安装专属模块";
+  }
+  if (code === "network_blacklisted") return "当前出口网段已被管理员拉黑";
+  if (code === "invalid_ip") return "当前出口 IP 地址无法识别";
+  return "Gatekeeper 暂时无法处理请求，请稍后重试";
+}
 
 if (
   !/^https:\/\//i.test(baseUrl) ||
@@ -37,102 +54,134 @@ if (
   );
   finish("Gatekeeper：未配置", "请编辑模块参数 url、domain 和 key", false);
 } else {
-  function report(ipInfo) {
-    var payload = { source: "surge" };
-    if (ipInfo && ipInfo.ip) {
-      payload.ip = ipInfo.ip;
-      payload.ipInfo = ipInfo;
-    }
-    $httpClient.post(
-      {
-        url: baseUrl + "/api/v1/whitelist",
-        headers: {
-          Authorization: "Bearer " + apiKey,
-          "Content-Type": "application/json",
+  var now = Date.now();
+  var nextAllowedAt = Number($persistentStore.read(NEXT_REPORT_KEY) || 0);
+  if (nextAllowedAt > now) {
+    finish(
+      "Gatekeeper：无需重复上报",
+      "刚刚已经触发过上报，" +
+        String(Math.ceil((nextAllowedAt - now) / 1000)) +
+        " 秒后可再次执行",
+      true,
+    );
+  } else {
+    $persistentStore.write(
+      String(now + cooldownSeconds * 1000),
+      NEXT_REPORT_KEY,
+    );
+
+    function report(ipInfo, ipInfoError) {
+      var payload = { source: "surge" };
+      if (ipInfo && ipInfo.ip) {
+        payload.ip = ipInfo.ip;
+        payload.ipInfo = ipInfo;
+      }
+      $httpClient.post(
+        {
+          url: baseUrl + "/api/v1/whitelist",
+          headers: {
+            Authorization: "Bearer " + apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+          timeout: 15,
         },
-        body: JSON.stringify(payload),
-        timeout: 15,
+        function (error, response, body) {
+          var status = response && (response.status || response.statusCode);
+          var data;
+          try {
+            data = JSON.parse(body || "{}");
+          } catch (_error) {
+            data = null;
+          }
+
+          if (error || status < 200 || status >= 300 || !data || !data.ok) {
+            var reason = apiFailureReason(error, data);
+            if (data && data.error === "rate_limit_exceeded") {
+              $persistentStore.write(
+                String(Date.now() + Number(data.retryAfter || 1) * 1000),
+                NEXT_REPORT_KEY,
+              );
+            } else {
+              $persistentStore.write("0", NEXT_REPORT_KEY);
+            }
+            $notification.post("Gatekeeper 自动加白", "上报失败", reason);
+            finish("Gatekeeper：上报失败", reason, false);
+            return;
+          }
+
+          var serverCooldown = Number(data.rateLimitSeconds || cooldownSeconds);
+          if (isFinite(serverCooldown) && serverCooldown > 0) {
+            $persistentStore.write(
+              String(Date.now() + serverCooldown * 1000),
+              NEXT_REPORT_KEY,
+            );
+          }
+
+          var networks = Array.isArray(data.ips)
+            ? data.ips.map(function (item) {
+                return typeof item === "string" ? item : item.ip;
+              })
+            : [];
+          var title =
+            "Gatekeeper " + data.slots + "/" + data.limit + " · " + data.ip;
+          var content =
+            (data.status === "added" ? "已加入网段" : "网段已在白名单") +
+            (data.ipInfoRecorded
+              ? " · IP 信息已更新"
+              : " · " + (ipInfoError || "IP 信息查询失败")) +
+            "\n" +
+            networks.join("\n") +
+            "\n更新时间：" +
+            new Date().toLocaleString();
+          var state = data.ip + "|" + networks.join(",");
+          var previous = $persistentStore.read(STATE_KEY);
+          if (previous !== state) {
+            $persistentStore.write(state, STATE_KEY);
+            $notification.post("Gatekeeper 自动加白", title, content);
+          }
+          finish(title, content, true);
+        },
+      );
+    }
+
+    $httpClient.get(
+      {
+        url: "https://64.ipcheck.ing/geo",
+        headers: {
+          Accept: "text/plain",
+          "User-Agent": "curl/8.7.1",
+        },
+        timeout: 10,
       },
       function (error, response, body) {
         var status = response && (response.status || response.statusCode);
-        var data;
-        try {
-          data = JSON.parse(body || "{}");
-        } catch (_error) {
-          data = null;
-        }
-
-        if (error || status < 200 || status >= 300 || !data || !data.ok) {
-          var reason = error
-            ? String(error)
-            : "HTTP " +
-              String(status || "?") +
-              " " +
-              String(body || "").slice(0, 80);
-          $notification.post("Gatekeeper 自动加白", "上报失败", reason);
-          finish("Gatekeeper：上报失败", reason, false);
-          return;
-        }
-
-        var networks = Array.isArray(data.ips)
-          ? data.ips.map(function (item) {
-              return typeof item === "string" ? item : item.ip;
-            })
-          : [];
-        var title =
-          "Gatekeeper " + data.slots + "/" + data.limit + " · " + data.ip;
-        var content =
-          (data.status === "added" ? "已加入网段" : "网段已在白名单") +
-          (data.ipInfoRecorded ? " · IP 信息已更新" : " · IP 信息查询失败") +
-          "\n" +
-          networks.join("\n") +
-          "\n更新时间：" +
-          new Date().toLocaleString();
-        var state = data.ip + "|" + networks.join(",");
-        var previous = $persistentStore.read(STATE_KEY);
-        if (previous !== state) {
-          $persistentStore.write(state, STATE_KEY);
-          $notification.post("Gatekeeper 自动加白", title, content);
-        }
-        finish(title, content, true);
+        if (error || status < 200 || status >= 300)
+          return report(null, "IPCheck.ing 查询失败，请检查直连规则");
+        var fields = {};
+        String(body || "")
+          .split(/\r?\n/)
+          .forEach(function (line) {
+            var separator = line.indexOf(":");
+            if (separator > 0)
+              fields[line.slice(0, separator).trim()] = line
+                .slice(separator + 1)
+                .trim();
+          });
+        report(
+          fields.IP
+            ? {
+                source: "ipcheck.ing",
+                ip: fields.IP,
+                country: fields.Country || "",
+                region: fields.Region || "",
+                city: fields.City || "",
+                isp: fields.Org || "",
+              }
+            : null,
+          fields.IP ? null : "IPCheck.ing 返回内容无法识别",
+        );
       },
     );
   }
-
-  $httpClient.get(
-    {
-      url: "https://64.ipcheck.ing/geo",
-      headers: {
-        Accept: "text/plain",
-        "User-Agent": "curl/8.7.1",
-      },
-      timeout: 10,
-    },
-    function (error, response, body) {
-      var status = response && (response.status || response.statusCode);
-      if (error || status < 200 || status >= 300) return report(null);
-      var fields = {};
-      String(body || "")
-        .split(/\r?\n/)
-        .forEach(function (line) {
-          var separator = line.indexOf(":");
-          if (separator > 0)
-            fields[line.slice(0, separator).trim()] = line
-              .slice(separator + 1)
-              .trim();
-        });
-      report(
-        fields.IP
-          ? {
-              source: "ipcheck.ing",
-              ip: fields.IP,
-              country: fields.Country || "",
-              region: fields.Region || "",
-              city: fields.City || "",
-              isp: fields.Org || "",
-            }
-          : null,
-      );
-    },
-  );
 }

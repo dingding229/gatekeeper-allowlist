@@ -45,6 +45,7 @@ export function createAllowlistRouter({ repository, apiAuth }) {
         slots: ips.length,
         limit: result.limit,
         ipInfoRecorded: Boolean(location),
+        rateLimitSeconds: repository.getApiRateLimitWindowMs() / 1000,
         ips,
       });
     } catch (error) {

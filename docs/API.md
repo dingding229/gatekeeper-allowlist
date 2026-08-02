@@ -75,6 +75,8 @@ RateLimit-Limit: 1
 RateLimit-Remaining: 0
 ```
 
+Surge 专属模块包含与后台间隔一致的本地防重复锁。即使定时任务和 `network-changed` 同时触发，也只会发送一次；如果服务端仍返回频率限制，面板显示中文原因和剩余等待时间，不显示 HTTP 状态码。
+
 ## 查询当前 Key 的网段
 
 ```http

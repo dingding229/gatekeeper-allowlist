@@ -17,6 +17,10 @@ export function createSurgeRouter({ repository, config }) {
         user,
         publicBaseUrl: config.publicBaseUrl,
         token: req.params.token,
+        cooldownSeconds: Math.max(
+          1,
+          repository.getApiRateLimitWindowMs() / 1000,
+        ),
       }),
     );
   });

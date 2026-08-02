@@ -96,11 +96,6 @@ export function loadConfig(env = process.env) {
   if (config.production && config.adminPassword === DEFAULT_PASSWORD) {
     throw new Error("ADMIN_PASSWORD must be changed in production");
   }
-  if (config.production && config.adminPassword.length < 12) {
-    throw new Error(
-      "ADMIN_PASSWORD must contain at least 12 characters in production",
-    );
-  }
   if (config.firewallSyncToken && config.firewallSyncToken.length < 24) {
     throw new Error("FIREWALL_SYNC_TOKEN must contain at least 24 characters");
   }

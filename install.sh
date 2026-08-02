@@ -128,10 +128,10 @@ while true; do
 done
 
 while true; do
-  ADMIN_PASSWORD="$(prompt_secret '后台管理员密码（至少 12 位）')"
+  ADMIN_PASSWORD="$(prompt_secret '后台管理员密码')"
   ADMIN_PASSWORD_CONFIRM="$(prompt_secret '再次输入管理员密码')"
-  if [[ ${#ADMIN_PASSWORD} -lt 12 ]]; then
-    warn "密码至少需要 12 位"
+  if [[ -z "$ADMIN_PASSWORD" ]]; then
+    warn "密码不能为空"
   elif [[ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]]; then
     warn "两次密码不一致"
   elif [[ ! "$ADMIN_PASSWORD" =~ ^[A-Za-z0-9@%_+=:,./!-]+$ ]]; then

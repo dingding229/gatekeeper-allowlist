@@ -178,7 +178,7 @@ test("admin can change API frequency and login credentials", async (t) => {
       body: JSON.stringify({
         username: "new-admin",
         currentPassword: "test-password",
-        newPassword: "new-test-password-123",
+        newPassword: "x",
       }),
     },
   );
@@ -208,7 +208,7 @@ test("admin can change API frequency and login credentials", async (t) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: "new-admin",
-          password: "new-test-password-123",
+          password: "x",
         }),
       })
     ).status,
@@ -248,6 +248,7 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   const moduleText = await moduleResponse.text();
   assert.match(moduleText, /#!arguments=interval:"3"/);
   assert.match(moduleText, /cronexp="\*\/\{\{\{interval\}\}\}/);
+  assert.match(moduleText, /cooldown=1/);
   assert.doesNotMatch(moduleText, /update-interval=/);
   assert.match(moduleText, /\[Panel\]/);
   assert.match(moduleText, /点击右上角刷新按钮手动加白/);

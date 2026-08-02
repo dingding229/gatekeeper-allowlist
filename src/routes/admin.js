@@ -123,7 +123,7 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
     ) {
       return res.status(400).json({ error: "invalid_admin_username" });
     }
-    if (newPassword && (newPassword.length < 12 || newPassword.length > 256)) {
+    if (newPassword.length > 256) {
       return res.status(400).json({ error: "invalid_admin_password" });
     }
     if (
