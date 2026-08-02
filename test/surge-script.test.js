@@ -2,9 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import {
+  SERVER_VERSION,
+  SURGE_MODULE_VERSION,
+  SURGE_SCRIPT_VERSION,
+} from "../src/version.js";
 
 const script = readFileSync(
   new URL("../surge/gatekeeper.js", import.meta.url),
+  "utf8",
+);
+const publicModule = readFileSync(
+  new URL("../surge/gatekeeper.sgmodule", import.meta.url),
   "utf8",
 );
 
@@ -26,8 +35,7 @@ function runSurge({
   let posts = 0;
   let postOptions;
   const context = {
-    $argument:
-      "url=https%3A%2F%2Fallowlist.example.com&key=sg_test&cooldown=30",
+    $argument: `url=https%3A%2F%2Fallowlist.example.com&key=sg_test&cooldown=30&moduleVersion=${SURGE_MODULE_VERSION}`,
     $environment: environment,
     $persistentStore: {
       read: (key) => store.get(key) || null,
@@ -67,6 +75,7 @@ function runSurge({
               slots: 1,
               limit: 3,
               ip: "8.8.8.0/24",
+              serverVersion: SERVER_VERSION,
               rateLimitSeconds: 30,
               ips: [{ ip: "8.8.8.0/24" }],
             },
@@ -78,6 +87,28 @@ function runSurge({
   vm.runInNewContext(script, context);
   return { result, requests, posts, store, postOptions };
 }
+
+test("Surge panel exposes module, script, and server versions", () => {
+  const { result } = runSurge();
+  assert.match(
+    result.content,
+    new RegExp(`版本：模块 v${SURGE_MODULE_VERSION}`),
+  );
+  assert.match(
+    result.content,
+    new RegExp(`\u811a\u672c v${SURGE_SCRIPT_VERSION}`),
+  );
+  assert.match(result.content, new RegExp(`服务端 v${SERVER_VERSION}`));
+  assert.match(
+    script,
+    new RegExp(`var SCRIPT_VERSION = "${SURGE_SCRIPT_VERSION}"`),
+  );
+  assert.match(publicModule, new RegExp(`#!version=${SURGE_MODULE_VERSION}`));
+  assert.match(
+    publicModule,
+    new RegExp(`moduleVersion=${SURGE_MODULE_VERSION}`),
+  );
+});
 
 test("Surge translates rate limiting into a clear reason without status codes", () => {
   const { result } = runSurge({

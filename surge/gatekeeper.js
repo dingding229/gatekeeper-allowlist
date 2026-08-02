@@ -1,5 +1,7 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
+var SCRIPT_VERSION = "1.1.0";
+
 function argumentsFromSurge() {
   var result = {};
   var raw = typeof $argument === "string" ? $argument : "";
@@ -23,6 +25,7 @@ function finish(title, content, ok) {
 var config = argumentsFromSurge();
 var baseUrl = String(config.url || "").replace(/\/+$/, "");
 var apiKey = String(config.key || "");
+var moduleVersion = String(config.moduleVersion || "旧版/未知");
 var keySuffix = apiKey.slice(-16).replace(/[^A-Za-z0-9_-]/g, "");
 var DEVICE_ID_STORE_KEY = "gatekeeper_device_id_" + keySuffix;
 var deviceId = String($persistentStore.read(DEVICE_ID_STORE_KEY) || "");
@@ -189,6 +192,12 @@ if (
               : " · " + (ipInfoError || "IP 信息查询失败")) +
             "\n" +
             networks.join("\n") +
+            "\n版本：模块 v" +
+            moduleVersion +
+            " · 脚本 v" +
+            SCRIPT_VERSION +
+            " · 服务端 v" +
+            String(data.serverVersion || "未知") +
             "\n更新时间：" +
             new Date().toLocaleString();
           var state = data.ip + "|" + networks.join(",");

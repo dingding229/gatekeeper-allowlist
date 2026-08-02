@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createApp } from "../src/app.js";
 import { openDatabase } from "../src/db.js";
 import { createRepository } from "../src/repository.js";
+import { SERVER_VERSION, SURGE_MODULE_VERSION } from "../src/version.js";
 
 const config = {
   adminUsername: "admin",
@@ -42,6 +43,16 @@ async function startTestApp(t, configOverrides = {}) {
     repository,
   };
 }
+
+test("health endpoint exposes the server version", async (t) => {
+  const { baseUrl } = await startTestApp(t);
+  const response = await fetch(`${baseUrl}/health`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    version: SERVER_VERSION,
+  });
+});
 
 test("empty API body uses the request source IP", async (t) => {
   const { baseUrl, repository } = await startTestApp(t);
@@ -246,7 +257,17 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
 
   const moduleResponse = await fetch(`${baseUrl}${moduleUrl.pathname}`);
   assert.equal(moduleResponse.status, 200);
+  assert.equal(
+    moduleResponse.headers.get("x-gatekeeper-server-version"),
+    SERVER_VERSION,
+  );
+  assert.equal(
+    moduleResponse.headers.get("x-gatekeeper-surge-module-version"),
+    SURGE_MODULE_VERSION,
+  );
   const moduleText = await moduleResponse.text();
+  assert.match(moduleText, new RegExp(`#!version=${SURGE_MODULE_VERSION}`));
+  assert.match(moduleText, new RegExp(`moduleVersion=${SURGE_MODULE_VERSION}`));
   assert.doesNotMatch(moduleText, /#!arguments=.*interval/);
   assert.doesNotMatch(moduleText, /device=\{\{\{device\}\}\}/);
   assert.match(moduleText, /cronexp="\*\/10 \* \* \* \*"/);

@@ -173,7 +173,12 @@ systemctl status gatekeeper-backup.timer
 
 # 从备份恢复（会先自动备份当前数据）
 sudo /opt/gatekeeper/scripts/restore.sh /var/backups/gatekeeper/gatekeeper-YYYYMMDDTHHMMSSZ.db.gz
+
+# 查看当前服务端版本
+curl -fsS https://你的域名/health
 ```
+
+后台左上角会显示服务端版本。Surge 模块名称和描述会显示模块版本；点击面板刷新后，结果中会同时显示“模块版本 · 脚本版本 · 服务端版本”，可用于判断远程更新是否生效。
 
 数据库保存在 Docker 命名卷中，默认每日备份到宿主机 `/var/backups/gatekeeper` 并保留 30 天。不要执行 `docker compose down -v`，否则会删除数据库和 HTTPS 证书数据。
 

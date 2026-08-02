@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { normalizeIp, normalizeNetwork } from "../security.js";
 import { sanitizeReportedIpInfo } from "../ip-info.js";
+import { SERVER_VERSION } from "../version.js";
 
 export function createAllowlistRouter({ repository, apiAuth }) {
   const router = Router();
@@ -40,6 +41,7 @@ export function createAllowlistRouter({ repository, apiAuth }) {
       const applied = ips.some((item) => item.ip === normalized.network);
       return res.status(result.status === "added" ? 201 : 200).json({
         ok: true,
+        serverVersion: SERVER_VERSION,
         applied,
         status: result.status,
         ip: normalized.network,
@@ -58,6 +60,7 @@ export function createAllowlistRouter({ repository, apiAuth }) {
   router.get("/whitelist", apiAuth, (req, res) => {
     const ips = repository.listUserIps(req.user.id);
     res.json({
+      serverVersion: SERVER_VERSION,
       user: req.user.name,
       limit: req.user.ip_limit,
       slots: ips.length,

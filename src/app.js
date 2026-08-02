@@ -9,6 +9,7 @@ import { createAdminRouter } from "./routes/admin.js";
 import { createAllowlistRouter } from "./routes/allowlist.js";
 import { createInternalRouter } from "./routes/internal.js";
 import { createSurgeRouter } from "./routes/surge.js";
+import { SERVER_VERSION } from "./version.js";
 
 const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
 
@@ -31,7 +32,7 @@ export function createApp({ db, config, services = {} }) {
 
   app.get("/health", (_req, res) => {
     repository.checkHealth();
-    res.json({ ok: true });
+    res.json({ ok: true, version: SERVER_VERSION });
   });
 
   app.use("/api/v1/surge", createSurgeRouter({ repository, config }));

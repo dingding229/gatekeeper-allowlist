@@ -7,6 +7,7 @@ import {
   sha256,
   verifyPassword,
 } from "./security.js";
+import { SERVER_VERSION } from "./version.js";
 
 const activeIpQuery = `
   SELECT w.id, w.ip, w.family, w.source, w.created_at, w.last_seen_at,
@@ -466,6 +467,7 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         settings: this.getFirewallSettings(),
         retentionSettings: this.getRetentionSettings(),
         applicationSettings: {
+          serverVersion: SERVER_VERSION,
           apiRateLimitSeconds: this.getApiRateLimitWindowMs() / 1000,
           adminUsername: this.getAdminUsername(),
         },

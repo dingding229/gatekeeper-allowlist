@@ -122,6 +122,8 @@ function renderUser(user, allIps, allDevices) {
 }
 
 export function renderDashboard(state, query = "") {
+  document.querySelector("#serverVersion").textContent =
+    `v${state.applicationSettings?.serverVersion || "未知"}`;
   document.querySelector("#statUsers").textContent = state.stats.users;
   document.querySelector("#statActive").textContent = state.stats.activeUsers;
   document.querySelector("#statIps").textContent = state.stats.ips;
