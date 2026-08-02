@@ -252,7 +252,7 @@ test("admin can obtain a user-specific Surge module and token", async (t) => {
   assert.match(moduleText, /device=\{\{\{device\}\}\}/);
   assert.match(moduleText, /script-update-interval=300/);
   assert.match(moduleText, /\[Panel\]/);
-  assert.match(moduleText, /点击右上角刷新按钮手动加白/);
+  assert.match(moduleText, /点击右上角刷新可强制上报当前 IP/);
 
   const surgeToken = moduleUrl.pathname.split("/").at(-2);
   const tamperedPath = moduleUrl.pathname.replace(

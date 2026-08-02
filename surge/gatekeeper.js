@@ -36,6 +36,7 @@ if (!/^[A-Za-z0-9_-]{8,64}$/.test(deviceId)) {
 }
 var deviceName = String(config.device || "Surge").trim().slice(0, 64) || "Surge";
 var STATE_KEY = "gatekeeper_allowlist_state_" + deviceId;
+var LAST_REPORTED_IP_KEY = "gatekeeper_last_reported_ip_" + deviceId;
 var NEXT_REPORT_KEY = "gatekeeper_next_report_" + deviceId;
 var cooldownSeconds = parseInt(config.cooldown || "30", 10);
 if (!isFinite(cooldownSeconds) || cooldownSeconds < 1) cooldownSeconds = 30;
@@ -82,15 +83,47 @@ if (
     );
 
     function report(ipInfo, ipInfoError) {
+      if (!ipInfo || !ipInfo.ip) {
+        $persistentStore.write("0", NEXT_REPORT_KEY);
+        var lookupReason = ipInfoError || "IPCheck.ing 返回内容无法识别";
+        $notification.post(
+          "Gatekeeper 自动加白",
+          "未检测到出口 IP",
+          lookupReason,
+        );
+        finish("Gatekeeper：IP 检测失败", lookupReason, false);
+        return;
+      }
+
+      var currentIp = String(ipInfo.ip).trim();
+      var lastReportedIp = String(
+        $persistentStore.read(LAST_REPORTED_IP_KEY) || "",
+      ).trim();
+      var manuallyForced =
+        typeof $script !== "undefined" &&
+        $script.type === "generic" &&
+        typeof $trigger !== "undefined" &&
+        $trigger === "button";
+      if (lastReportedIp === currentIp && !manuallyForced) {
+        $persistentStore.write("0", NEXT_REPORT_KEY);
+        finish(
+          "Gatekeeper：IP 未变化",
+          "当前出口 IP " +
+            currentIp +
+            "\n未调用上报接口\n检查时间：" +
+            new Date().toLocaleString(),
+          true,
+        );
+        return;
+      }
+
       var payload = {
-        source: "surge",
+        source: manuallyForced ? "surge-manual" : "surge",
         deviceId: deviceId,
         deviceName: deviceName,
+        ip: currentIp,
+        ipInfo: ipInfo,
       };
-      if (ipInfo && ipInfo.ip) {
-        payload.ip = ipInfo.ip;
-        payload.ipInfo = ipInfo;
-      }
       $httpClient.post(
         {
           url: baseUrl + "/api/v1/whitelist",
@@ -133,6 +166,7 @@ if (
               NEXT_REPORT_KEY,
             );
           }
+          $persistentStore.write(currentIp, LAST_REPORTED_IP_KEY);
 
           var networks = Array.isArray(data.ips)
             ? data.ips.map(function (item) {
