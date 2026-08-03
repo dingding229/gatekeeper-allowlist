@@ -40,6 +40,7 @@ const schema = `
     family INTEGER NOT NULL CHECK (family IN (4, 6)),
     source TEXT NOT NULL DEFAULT 'api',
     status TEXT NOT NULL CHECK (status IN ('added', 'existing')),
+    event TEXT NOT NULL DEFAULT 'reported',
     country TEXT,
     region TEXT,
     city TEXT,
@@ -150,7 +151,7 @@ const schema = `
   INSERT OR IGNORE INTO settings (key, value) VALUES
     ('protected_tcp_ports', '["22"]'),
     ('protected_udp_ports', '[]'),
-    ('history_retention_days', '180'),
+    ('history_retention_days', '7'),
     ('audit_retention_days', '365'),
     ('device_retention_days', '90'),
     ('firewall_revision', '0');
@@ -226,6 +227,10 @@ export function openDatabase(filename) {
   ensureColumn(db, "users", "device_limit", "INTEGER NOT NULL DEFAULT 20");
   ensureColumn(db, "users", "surge_version", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "ip_history", "geo_source", "TEXT");
+  ensureColumn(db, "ip_history", "event", "TEXT NOT NULL DEFAULT 'reported'");
+  db.prepare(
+    "UPDATE settings SET value = '7' WHERE key = 'history_retention_days' AND value = '180'",
+  ).run();
   migrateNetworks(db);
   return db;
 }

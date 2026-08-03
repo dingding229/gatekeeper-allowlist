@@ -520,6 +520,10 @@ dialog {
   margin-top: 20px;
   overflow: auto;
 }
+#historySearch {
+  width: 100%;
+  margin-top: 12px;
+}
 .history-table {
   width: 100%;
   border-collapse: collapse;

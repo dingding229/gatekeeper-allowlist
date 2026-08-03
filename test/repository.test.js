@@ -106,7 +106,7 @@ test("per-user limits evict old networks while history is preserved", () => {
   assert.equal(third.limit, 2);
   assert.equal(third.evicted, "8.8.8.0/24");
   assert.equal(repository.listUserIps(user.id).length, 2);
-  assert.equal(repository.listUserHistory(user.id).length, 3);
+  assert.equal(repository.listUserHistory(user.id).length, 4);
 
   const lowered = repository.setUserLimit(user.id, 1);
   assert.deepEqual(lowered.evicted, ["1.1.1.0/24"]);
@@ -123,7 +123,7 @@ test("per-user limits evict old networks while history is preserved", () => {
   });
   assert.equal(repository.listUserIps(user.id)[0].isp, "Quad9");
   assert.equal(repository.clearUserIps(user.id), 1);
-  assert.equal(repository.listUserHistory(user.id).length, 3);
+  assert.equal(repository.listUserHistory(user.id).length, 6);
   db.close();
 });
 

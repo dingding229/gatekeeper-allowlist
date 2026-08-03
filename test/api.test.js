@@ -495,6 +495,13 @@ test("API frequency is isolated per device and devices appear in overview", asyn
     "Phone",
     "Tablet",
   ]);
+  const limitResponse = await fetch(`${baseUrl}/api/admin/users/${user.id}`, {
+    method: "PATCH",
+    headers: { Cookie: cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ deviceLimit: 1 }),
+  });
+  assert.equal(limitResponse.status, 200);
+  assert.equal((await limitResponse.json()).evictedDevices.length, 1);
 });
 
 test("a device can report immediately when its trusted source IP changes", async (t) => {
@@ -699,8 +706,19 @@ test("admin can set user quota, inspect history, and clear active networks", asy
       headers: { Cookie: cookie },
     })
   ).json();
-  assert.equal(history.history.length, 3);
+  assert.equal(history.history.length, 4);
   assert.equal(history.history[0].observed_ip, "9.9.9.9");
+  const searchedHistory = await (
+    await fetch(`${baseUrl}/api/admin/users/${user.id}/history?q=8.8.8.8`, {
+      headers: { Cookie: cookie },
+    })
+  ).json();
+  assert.ok(searchedHistory.history.length >= 1);
+  assert.ok(
+    searchedHistory.history.every((row) =>
+      `${row.observed_ip} ${row.network}`.includes("8.8.8.8"),
+    ),
+  );
 
   const cleared = await fetch(`${baseUrl}/api/admin/users/${user.id}/ips`, {
     method: "DELETE",
@@ -709,7 +727,7 @@ test("admin can set user quota, inspect history, and clear active networks", asy
   assert.equal(cleared.status, 200);
   assert.equal((await cleared.json()).removed, 2);
   assert.equal(repository.listUserIps(user.id).length, 0);
-  assert.equal(repository.listUserHistory(user.id).length, 3);
+  assert.equal(repository.listUserHistory(user.id).length, 6);
 });
 
 test("firewall revision long poll wakes immediately after an API change", async (t) => {

@@ -4,6 +4,8 @@ import {
   LOGIN_WINDOW_MS,
   MAX_IP_LIMIT,
   MIN_IP_LIMIT,
+  MAX_DEVICE_LIMIT,
+  MIN_DEVICE_LIMIT,
   SESSION_TTL_MS,
 } from "../constants.js";
 import {
@@ -221,7 +223,8 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
     if (!userId) return res.status(400).json({ error: "invalid_user_id" });
     const hasEnabled = Object.hasOwn(req.body || {}, "enabled");
     const hasIpLimit = Object.hasOwn(req.body || {}, "ipLimit");
-    if (!hasEnabled && !hasIpLimit) {
+    const hasDeviceLimit = Object.hasOwn(req.body || {}, "deviceLimit");
+    if (!hasEnabled && !hasIpLimit && !hasDeviceLimit) {
       return res.status(400).json({ error: "missing_user_update" });
     }
     if (hasEnabled && typeof req.body.enabled !== "boolean") {
@@ -239,6 +242,18 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
         max: MAX_IP_LIMIT,
       });
     }
+    if (
+      hasDeviceLimit &&
+      (!Number.isInteger(req.body.deviceLimit) ||
+        req.body.deviceLimit < MIN_DEVICE_LIMIT ||
+        req.body.deviceLimit > MAX_DEVICE_LIMIT)
+    ) {
+      return res.status(400).json({
+        error: "invalid_device_limit",
+        min: MIN_DEVICE_LIMIT,
+        max: MAX_DEVICE_LIMIT,
+      });
+    }
     const existing = repository.findUserById(userId);
     if (!existing) {
       return res.status(404).json({ error: "user_not_found" });
@@ -247,7 +262,14 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
     const limitResult = hasIpLimit
       ? repository.setUserLimit(userId, req.body.ipLimit)
       : null;
-    return res.json({ ok: true, evicted: limitResult?.evicted || [] });
+    const deviceLimitResult = hasDeviceLimit
+      ? repository.setUserDeviceLimit(userId, req.body.deviceLimit)
+      : null;
+    return res.json({
+      ok: true,
+      evicted: limitResult?.evicted || [],
+      evictedDevices: deviceLimitResult?.evicted || [],
+    });
   });
 
   router.delete("/users/:id", adminAuth, (req, res) => {
@@ -404,9 +426,13 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
       1_000_000,
       Math.max(0, Number.parseInt(req.query.offset, 10) || 0),
     );
+    const search = String(req.query.q || "")
+      .trim()
+      .slice(0, 80);
     return res.json({
       ok: true,
-      history: repository.listUserHistory(userId, limit, offset),
+      history: repository.listUserHistory(userId, limit, offset, search),
+      search,
     });
   });
 

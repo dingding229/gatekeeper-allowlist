@@ -177,15 +177,36 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         .all(userId);
     },
 
-    listUserHistory(userId, limit = 100, offset = 0) {
+    listUserHistory(userId, limit = 100, offset = 0, search = "") {
+      const query = String(search || "")
+        .trim()
+        .slice(0, 80);
+      const pattern = `%${query}%`;
       return db
         .prepare(
           `SELECT id, observed_ip, network, family, source, status,
-                  country, region, city, isp, geo_source, created_at
+                  event, country, region, city, isp, geo_source, created_at
            FROM ip_history WHERE user_id = ?
+             AND (? = '' OR observed_ip LIKE ? OR network LIKE ?
+                  OR source LIKE ? OR status LIKE ? OR event LIKE ?
+                  OR country LIKE ? OR region LIKE ? OR city LIKE ? OR isp LIKE ?)
            ORDER BY id DESC LIMIT ? OFFSET ?`,
         )
-        .all(userId, limit, offset);
+        .all(
+          userId,
+          query,
+          pattern,
+          pattern,
+          pattern,
+          pattern,
+          pattern,
+          pattern,
+          pattern,
+          pattern,
+          pattern,
+          limit,
+          offset,
+        );
     },
 
     addIp(userId, observedIp, network, family, source = "api") {
@@ -209,8 +230,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
           const history = db
             .prepare(
               `INSERT INTO ip_history
-               (user_id, observed_ip, network, family, source, status)
-               VALUES (?, ?, ?, ?, ?, 'existing')`,
+               (user_id, observed_ip, network, family, source, status, event)
+               VALUES (?, ?, ?, ?, ?, 'existing', 'reported')`,
             )
             .run(userId, observedIp, network, family, source);
           insertAudit.run(userId, "ip.seen", network, observedIp);
@@ -225,13 +246,18 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
 
         const current = db
           .prepare(
-            `SELECT id, ip FROM whitelist_ips WHERE user_id = ?
+            `SELECT id, ip, family FROM whitelist_ips WHERE user_id = ?
              ORDER BY created_at ASC, id ASC`,
           )
           .all(userId);
         let evicted = null;
         if (current.length >= user.ip_limit) {
           evicted = current[0].ip;
+          db.prepare(
+            `INSERT INTO ip_history
+             (user_id, observed_ip, network, family, source, status, event)
+             VALUES (?, ?, ?, ?, 'system', 'existing', 'evicted')`,
+          ).run(userId, evicted, evicted, current[0].family || family);
           db.prepare("DELETE FROM whitelist_ips WHERE id = ?").run(
             current[0].id,
           );
@@ -249,8 +275,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         const history = db
           .prepare(
             `INSERT INTO ip_history
-             (user_id, observed_ip, network, family, source, status)
-             VALUES (?, ?, ?, ?, ?, 'added')`,
+           (user_id, observed_ip, network, family, source, status, event)
+           VALUES (?, ?, ?, ?, ?, 'added', 'added')`,
           )
           .run(userId, observedIp, network, family, source);
         insertAudit.run(
@@ -584,6 +610,14 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
           )
           .all(userId, userId, ipLimit);
         for (const row of excess) {
+          const network = db
+            .prepare("SELECT family FROM whitelist_ips WHERE id = ?")
+            .get(row.id);
+          db.prepare(
+            `INSERT INTO ip_history
+             (user_id, observed_ip, network, family, source, status, event)
+             VALUES (?, ?, ?, ?, 'system', 'existing', 'evicted')`,
+          ).run(userId, row.ip, row.ip, network?.family || 4);
           db.prepare("DELETE FROM whitelist_ips WHERE id = ?").run(row.id);
           insertAudit.run(userId, "ip.evicted", row.ip, "limit reduced");
         }
@@ -593,6 +627,42 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         db.exec("COMMIT");
         notifyFirewallChange(revision);
         return { ipLimit, evicted };
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
+    setUserDeviceLimit(userId, deviceLimit) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const result = db
+          .prepare("UPDATE users SET device_limit = ? WHERE id = ?")
+          .run(deviceLimit, userId);
+        if (!result.changes) {
+          db.exec("ROLLBACK");
+          return null;
+        }
+        const excess = db
+          .prepare(
+            `SELECT id, device_key FROM user_devices WHERE user_id = ?
+             ORDER BY last_seen_at ASC, id ASC
+             LIMIT MAX(0, (SELECT count(*) FROM user_devices WHERE user_id = ?) - ?)`,
+          )
+          .all(userId, userId, deviceLimit);
+        for (const device of excess) {
+          db.prepare(
+            "DELETE FROM api_device_rate_limits WHERE user_id = ? AND device_key = ?",
+          ).run(userId, device.device_key);
+          db.prepare("DELETE FROM user_devices WHERE id = ?").run(device.id);
+          insertAudit.run(userId, "device.evicted", null, device.device_key);
+        }
+        insertAudit.run(userId, "user.device_limit", null, String(deviceLimit));
+        db.exec("COMMIT");
+        return {
+          deviceLimit,
+          evicted: excess.map((device) => device.device_key),
+        };
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;
@@ -677,7 +747,7 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         rows.map((row) => [row.key, Number(row.value)]),
       );
       return {
-        historyDays: values.history_retention_days || 180,
+        historyDays: values.history_retention_days || 7,
         auditDays: values.audit_retention_days || 365,
         deviceDays: values.device_retention_days || 90,
       };
@@ -734,12 +804,17 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
       db.exec("BEGIN IMMEDIATE");
       try {
         const row = db
-          .prepare("SELECT user_id, ip FROM whitelist_ips WHERE id = ?")
+          .prepare("SELECT user_id, ip, family FROM whitelist_ips WHERE id = ?")
           .get(ipId);
         if (!row) {
           db.exec("ROLLBACK");
           return false;
         }
+        db.prepare(
+          `INSERT INTO ip_history
+           (user_id, observed_ip, network, family, source, status, event)
+           VALUES (?, ?, ?, ?, 'admin', 'existing', 'removed')`,
+        ).run(row.user_id, row.ip, row.ip, row.family);
         db.prepare("DELETE FROM whitelist_ips WHERE id = ?").run(ipId);
         insertAudit.run(row.user_id, "ip.removed", row.ip, null);
         revision = bumpFirewallRevision();
@@ -759,6 +834,16 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         if (!db.prepare("SELECT 1 FROM users WHERE id = ?").get(userId)) {
           db.exec("ROLLBACK");
           return null;
+        }
+        const active = db
+          .prepare("SELECT ip, family FROM whitelist_ips WHERE user_id = ?")
+          .all(userId);
+        for (const row of active) {
+          db.prepare(
+            `INSERT INTO ip_history
+             (user_id, observed_ip, network, family, source, status, event)
+             VALUES (?, ?, ?, ?, 'admin', 'existing', 'removed')`,
+          ).run(userId, row.ip, row.ip, row.family);
         }
         const result = db
           .prepare("DELETE FROM whitelist_ips WHERE user_id = ?")

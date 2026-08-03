@@ -379,7 +379,14 @@
       <div class="key-result">
         <button class="dialog-x" data-close aria-label="关闭">×</button>
         <h2 id="historyTitle">历史 IP</h2>
-        <p class="muted">显示最近 100 次上报；清空当前网段不会删除历史记录。</p>
+        <p class="muted">
+          保留最近 7 天的上报、新增、淘汰和删除记录；清空当前网段不会删除历史。
+        </p>
+        <input
+          id="historySearch"
+          class="search"
+          placeholder="搜索 IP、网段、来源或地区…"
+        />
         <div id="historyContent"></div>
       </div>
     </dialog>

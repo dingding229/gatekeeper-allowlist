@@ -10,6 +10,16 @@ let state = {
   settings: {},
   stats: {},
 };
+let historyUserId = null;
+
+async function loadHistory(userId, search = "") {
+  const query = new URLSearchParams({ limit: "200" });
+  if (search.trim()) query.set("q", search.trim());
+  const result = await apiRequest(
+    `/api/admin/users/${userId}/history?${query.toString()}`,
+  );
+  $("#historyContent").innerHTML = renderHistory(result.history);
+}
 
 function showToast(message) {
   const toast = $("#toast");
@@ -168,6 +178,16 @@ $("#retentionForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("#historySearch").addEventListener("input", async (event) => {
+  if (!historyUserId) return;
+  try {
+    await loadHistory(historyUserId, event.target.value);
+  } catch {
+    $("#historyContent").innerHTML =
+      '<div class="empty">历史记录搜索失败，请稍后重试</div>';
+  }
+});
+
 $("#adminCredentialsForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const newPassword = $("#newAdminPassword").value;
@@ -275,6 +295,27 @@ $("#userList").addEventListener("click", async (event) => {
       return;
     }
 
+    const deviceLimitButton = event.target.closest("[data-save-device-limit]");
+    if (deviceLimitButton) {
+      const input = document.querySelector(
+        `[data-device-limit-input="${deviceLimitButton.dataset.saveDeviceLimit}"]`,
+      );
+      const result = await apiRequest(
+        `/api/admin/users/${deviceLimitButton.dataset.saveDeviceLimit}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ deviceLimit: Number(input.value) }),
+        },
+      );
+      showToast(
+        result.evictedDevices?.length
+          ? `设备配额已保存，并移除 ${result.evictedDevices.length} 台旧设备`
+          : "设备数量配额已保存",
+      );
+      await loadDashboard();
+      return;
+    }
+
     const clearButton = event.target.closest("[data-clear-ips]");
     if (
       clearButton &&
@@ -310,13 +351,12 @@ $("#userList").addEventListener("click", async (event) => {
       const user = state.users.find(
         (item) => item.id === Number(historyButton.dataset.history),
       );
+      historyUserId = Number(historyButton.dataset.history);
       $("#historyTitle").textContent = `${user?.name || "用户"} · 历史 IP`;
+      $("#historySearch").value = "";
       $("#historyContent").innerHTML = '<div class="empty">正在加载…</div>';
       $("#historyDialog").showModal();
-      const result = await apiRequest(
-        `/api/admin/users/${historyButton.dataset.history}/history?limit=100`,
-      );
-      $("#historyContent").innerHTML = renderHistory(result.history);
+      await loadHistory(historyUserId);
       return;
     }
 

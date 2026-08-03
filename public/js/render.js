@@ -21,6 +21,8 @@ const actionNames = {
   "global_network.added": "添加全局网段",
   "global_network.removed": "移除全局网段",
   "device.removed": "移除设备",
+  "device.evicted": "自动淘汰设备",
+  "user.device_limit": "调整设备配额",
   "surge.rotated": "撤销 Surge 模块",
   "settings.retention": "更新数据保留策略",
 };
@@ -116,6 +118,10 @@ function renderUser(user, allIps, allDevices) {
             <input type="number" min="1" max="100" value="${user.ip_limit}" data-limit-input="${user.id}">
             <button class="ghost" data-save-limit="${user.id}">保存配额</button>
           </label>
+          <label class="limit-control">设备配额
+            <input type="number" min="1" max="100" value="${user.device_limit}" data-device-limit-input="${user.id}">
+            <button class="ghost" data-save-device-limit="${user.id}">保存设备配额</button>
+          </label>
           <button class="ghost" data-toggle-user="${user.id}" data-enabled="${user.enabled ? 0 : 1}">
             ${user.enabled ? "停用用户" : "重新启用"}
           </button>
@@ -155,7 +161,7 @@ export function renderDashboard(state, query = "") {
   document.querySelector("#adminUsername").value =
     state.applicationSettings?.adminUsername || "admin";
   document.querySelector("#historyRetentionDays").value =
-    state.retentionSettings?.historyDays || 180;
+    state.retentionSettings?.historyDays || 7;
   document.querySelector("#auditRetentionDays").value =
     state.retentionSettings?.auditDays || 365;
   document.querySelector("#deviceRetentionDays").value =
@@ -249,7 +255,15 @@ export function renderHistory(rows) {
       (row) => `<tr>
         <td><code>${escapeHtml(row.observed_ip)}</code><br><small>${escapeHtml(row.network)} · ${escapeHtml(row.source)}</small></td>
         <td>${escapeHtml(locationText(row))}<br><small>${escapeHtml(row.isp || "—")}${row.geo_source ? ` · ${escapeHtml(row.geo_source)}` : ""}</small></td>
-        <td>${row.status === "added" ? "新增" : "已存在"}</td>
+        <td>${
+          row.event === "removed"
+            ? "已删除"
+            : row.event === "evicted"
+              ? "自动淘汰"
+              : row.event === "added"
+                ? "新增"
+                : "已上报"
+        }</td>
         <td><small>${formatTime(row.created_at)}</small></td>
       </tr>`,
     )
