@@ -745,6 +745,13 @@ test("admin can set user quota, inspect history, and clear active networks", asy
   assert.equal((await cleared.json()).removed, 2);
   assert.equal(repository.listUserIps(user.id).length, 0);
   assert.equal(repository.listUserHistory(user.id).length, 6);
+  const removedHistory = await (
+    await fetch(`${baseUrl}/api/admin/users/${user.id}/history?event=removed`, {
+      headers: { Cookie: cookie },
+    })
+  ).json();
+  assert.equal(removedHistory.history.length, 2);
+  assert.ok(removedHistory.history.every((row) => row.event === "removed"));
 });
 
 test("firewall revision long poll wakes immediately after an API change", async (t) => {

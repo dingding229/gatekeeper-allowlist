@@ -12,9 +12,10 @@ let state = {
 };
 let historyUserId = null;
 
-async function loadHistory(userId, search = "") {
+async function loadHistory(userId, search = "", event = "") {
   const query = new URLSearchParams({ limit: "200" });
   if (search.trim()) query.set("q", search.trim());
+  if (event) query.set("event", event);
   const result = await apiRequest(
     `/api/admin/users/${userId}/history?${query.toString()}`,
   );
@@ -189,14 +190,25 @@ $("#retentionForm").addEventListener("submit", async (event) => {
   }
 });
 
-$("#historySearch").addEventListener("input", async (event) => {
+async function refreshHistory() {
   if (!historyUserId) return;
   try {
-    await loadHistory(historyUserId, event.target.value);
+    await loadHistory(
+      historyUserId,
+      $("#historySearch").value,
+      $("#historyEvent").value,
+    );
   } catch {
     $("#historyContent").innerHTML =
       '<div class="empty">历史记录搜索失败，请稍后重试</div>';
   }
+}
+
+$("#historySearch").addEventListener("input", refreshHistory);
+$("#historyEvent").addEventListener("change", refreshHistory);
+
+$("#historyDialog").addEventListener("close", () => {
+  historyUserId = null;
 });
 
 $("#adminCredentialsForm").addEventListener("submit", async (event) => {
@@ -287,41 +299,24 @@ $("#userList").addEventListener("click", async (event) => {
       return;
     }
 
-    const limitButton = event.target.closest("[data-save-limit]");
+    const limitButton = event.target.closest("[data-save-quota]");
     if (limitButton) {
-      const input = document.querySelector(
-        `[data-limit-input="${limitButton.dataset.saveLimit}"]`,
+      const userId = limitButton.dataset.saveQuota;
+      const ipInput = document.querySelector(`[data-limit-input="${userId}"]`);
+      const deviceInput = document.querySelector(
+        `[data-device-limit-input="${userId}"]`,
       );
-      const ipLimit = Number(input.value);
-      const result = await apiRequest(
-        `/api/admin/users/${limitButton.dataset.saveLimit}`,
-        { method: "PATCH", body: JSON.stringify({ ipLimit }) },
-      );
+      const result = await apiRequest(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ipLimit: Number(ipInput.value),
+          deviceLimit: Number(deviceInput.value),
+        }),
+      });
       showToast(
-        result.evicted.length
-          ? `配额已保存，并淘汰 ${result.evicted.length} 个旧网段`
-          : "用户网段配额已保存",
-      );
-      await loadDashboard();
-      return;
-    }
-
-    const deviceLimitButton = event.target.closest("[data-save-device-limit]");
-    if (deviceLimitButton) {
-      const input = document.querySelector(
-        `[data-device-limit-input="${deviceLimitButton.dataset.saveDeviceLimit}"]`,
-      );
-      const result = await apiRequest(
-        `/api/admin/users/${deviceLimitButton.dataset.saveDeviceLimit}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ deviceLimit: Number(input.value) }),
-        },
-      );
-      showToast(
-        result.evictedDevices?.length
-          ? `设备配额已保存，并移除 ${result.evictedDevices.length} 台旧设备`
-          : "设备数量配额已保存",
+        result.evicted.length || result.evictedDevices?.length
+          ? `配额已保存，淘汰 ${result.evicted.length} 个网段、${result.evictedDevices?.length || 0} 台设备`
+          : "网段和设备配额已保存",
       );
       await loadDashboard();
       return;
@@ -365,6 +360,7 @@ $("#userList").addEventListener("click", async (event) => {
       historyUserId = Number(historyButton.dataset.history);
       $("#historyTitle").textContent = `${user?.name || "用户"} · 历史 IP`;
       $("#historySearch").value = "";
+      $("#historyEvent").value = "";
       $("#historyContent").innerHTML = '<div class="empty">正在加载…</div>';
       $("#historyDialog").showModal();
       await loadHistory(historyUserId);

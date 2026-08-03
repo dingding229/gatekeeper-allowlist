@@ -402,6 +402,13 @@
           class="search"
           placeholder="搜索 IP、网段、来源或地区…"
         />
+        <select id="historyEvent" class="history-filter">
+          <option value="">全部记录</option>
+          <option value="reported">仅查看上报记录</option>
+          <option value="added">仅查看新增 IP</option>
+          <option value="removed">仅查看删除 IP</option>
+          <option value="evicted">仅查看自动淘汰 IP</option>
+        </select>
         <div id="historyContent"></div>
       </div>
     </dialog>

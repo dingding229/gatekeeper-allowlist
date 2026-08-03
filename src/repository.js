@@ -205,16 +205,21 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         .all(userId);
     },
 
-    listUserHistory(userId, limit = 100, offset = 0, search = "") {
+    listUserHistory(userId, limit = 100, offset = 0, search = "", event = "") {
       const query = String(search || "")
         .trim()
         .slice(0, 80);
+      const eventFilter = ["reported", "added", "removed", "evicted"].includes(
+        event,
+      )
+        ? event
+        : "";
       const pattern = `%${query}%`;
       return db
         .prepare(
           `SELECT id, observed_ip, network, family, source, status,
                   event, country, region, city, isp, geo_source, created_at
-           FROM ip_history WHERE user_id = ?
+           FROM ip_history WHERE user_id = ? AND (? = '' OR event = ?)
              AND (? = '' OR observed_ip LIKE ? OR network LIKE ?
                   OR source LIKE ? OR status LIKE ? OR event LIKE ?
                   OR country LIKE ? OR region LIKE ? OR city LIKE ? OR isp LIKE ?)
@@ -222,6 +227,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         )
         .all(
           userId,
+          eventFilter,
+          eventFilter,
           query,
           pattern,
           pattern,

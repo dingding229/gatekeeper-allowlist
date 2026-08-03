@@ -436,10 +436,14 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
     const search = String(req.query.q || "")
       .trim()
       .slice(0, 80);
+    const event = String(req.query.event || "");
     return res.json({
       ok: true,
-      history: repository.listUserHistory(userId, limit, offset, search),
+      history: repository.listUserHistory(userId, limit, offset, search, event),
       search,
+      event: ["reported", "added", "removed", "evicted"].includes(event)
+        ? event
+        : "",
     });
   });
 

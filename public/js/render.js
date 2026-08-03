@@ -147,11 +147,10 @@ function renderUser(user, allIps, allDevices) {
         <div class="row-actions">
           <label class="limit-control">网段配额
             <input type="number" min="1" max="100" value="${user.ip_limit}" data-limit-input="${user.id}">
-            <button class="ghost" data-save-limit="${user.id}">保存配额</button>
+            <button class="ghost" data-save-quota="${user.id}">保存配额</button>
           </label>
           <label class="limit-control">设备配额
             <input type="number" min="1" max="100" value="${user.device_limit}" data-device-limit-input="${user.id}">
-            <button class="ghost" data-save-device-limit="${user.id}">保存设备配额</button>
           </label>
           <button class="ghost" data-toggle-user="${user.id}" data-enabled="${user.enabled ? 0 : 1}">
             ${user.enabled ? "停用用户" : "重新启用"}
