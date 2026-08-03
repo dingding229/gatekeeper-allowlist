@@ -1,6 +1,6 @@
 #!name=Gatekeeper 自动加白
-#!version=1.2.10
-#!desc=网络切换时立即上报，10 分钟后再定时自愈；模块 v1.2.10。
+#!version=1.2.11
+#!desc=网络切换时立即上报，10 分钟后再定时自愈；模块 v1.2.11。
 #!category=Gatekeeper
 #!author=dingding229
 #!arguments=domain:"",url:"",key:"",cooldown:"30"
@@ -12,9 +12,9 @@ DOMAIN,{{{domain}}},DIRECT,extended-matching
 DOMAIN,64.ipcheck.ing,DIRECT,extended-matching
 
 [Script]
-gatekeeper-cron = type=cron,cronexp="*/10 * * * *",script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=1.2.10,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&moduleVersion=1.2.10&moduleUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fdingding229%2Fgatekeeper-allowlist%2Fmain%2Fsurge%2Fgatekeeper.sgmodule"
-gatekeeper-event = type=event,event-name=network-changed,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=1.2.10,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&moduleVersion=1.2.10&moduleUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fdingding229%2Fgatekeeper-allowlist%2Fmain%2Fsurge%2Fgatekeeper.sgmodule"
-gatekeeper-panel = type=generic,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=1.2.10,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&moduleVersion=1.2.10&moduleUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fdingding229%2Fgatekeeper-allowlist%2Fmain%2Fsurge%2Fgatekeeper.sgmodule"
+gatekeeper-cron = type=cron,cronexp="*/10 * * * *",script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=1.2.11,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&moduleVersion=1.2.11&moduleUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fdingding229%2Fgatekeeper-allowlist%2Fmain%2Fsurge%2Fgatekeeper.sgmodule"
+gatekeeper-event = type=event,event-name=network-changed,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=1.2.11,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&moduleVersion=1.2.11&moduleUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fdingding229%2Fgatekeeper-allowlist%2Fmain%2Fsurge%2Fgatekeeper.sgmodule"
+gatekeeper-panel = type=generic,script-path=https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/gatekeeper.js?v=1.2.11,script-update-interval=300,timeout=30,argument="url={{{url}}}&key={{{key}}}&cooldown={{{cooldown}}}&moduleVersion=1.2.11&moduleUrl=https%3A%2F%2Fraw.githubusercontent.com%2Fdingding229%2Fgatekeeper-allowlist%2Fmain%2Fsurge%2Fgatekeeper.sgmodule"
 
 [Panel]
-gatekeeper_manual_panel = title="Gatekeeper 自动加白 v1.2.10",content="点击右上角刷新上报当前 IP",style=info,script-name=gatekeeper-panel
+gatekeeper_manual_panel = title="Gatekeeper 自动加白 v1.2.11",content="点击右上角刷新上报当前 IP",style=info,script-name=gatekeeper-panel

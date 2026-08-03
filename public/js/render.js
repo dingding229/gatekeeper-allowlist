@@ -59,6 +59,9 @@ function renderFirewallConfig(config) {
     </dl>`;
 }
 
+const renderRuleRow = (value, detail, action, attribute, label = "移除") =>
+  `<div class="rule-row"><div><code>${escapeHtml(value)}</code><small>${escapeHtml(detail)}</small></div><button class="danger-link" ${attribute}="${escapeHtml(String(action))}">${label}</button></div>`;
+
 function renderIpRows(ips) {
   if (!ips.length)
     return '<tr><td colspan="4"><small>尚未添加网段</small></td></tr>';
@@ -252,27 +255,40 @@ export function renderDashboard(state, query = "") {
   document.querySelector("#blacklistList").innerHTML = state.blockedNetworks
     ?.length
     ? state.blockedNetworks
-        .map(
-          (row) =>
-            `<div class="audit-row"><code>${escapeHtml(row.network)}</code><small>${escapeHtml(row.reason || "无备注")}</small><button class="danger-link" data-unblock="${row.id}">解除</button></div>`,
+        .map((row) =>
+          renderRuleRow(
+            row.network,
+            row.reason || "无备注",
+            row.id,
+            "data-unblock",
+            "解除",
+          ),
         )
         .join("")
     : '<div class="empty">暂无黑名单网段</div>';
   document.querySelector("#permanentList").innerHTML = state.permanentWhitelist
     ?.length
     ? state.permanentWhitelist
-        .map(
-          (row) =>
-            `<div class="audit-row"><code>${escapeHtml(row.ip)}</code><small>${escapeHtml(row.label || "无备注")}</small><button class="danger-link" data-remove-permanent="${row.id}">移除</button></div>`,
+        .map((row) =>
+          renderRuleRow(
+            row.ip,
+            row.label || "无备注",
+            row.id,
+            "data-remove-permanent",
+          ),
         )
         .join("")
     : '<div class="empty">暂无永久放行 IP</div>';
   document.querySelector("#globalWhitelistList").innerHTML = state
     .globalWhitelist?.length
     ? state.globalWhitelist
-        .map(
-          (row) =>
-            `<div class="audit-row"><code>${escapeHtml(row.network)}</code><small>所有用户 · ${escapeHtml(row.label || "无备注")}</small><button class="danger-link" data-remove-global-network="${row.id}">移除</button></div>`,
+        .map((row) =>
+          renderRuleRow(
+            row.network,
+            `所有用户 · ${row.label || "无备注"}`,
+            row.id,
+            "data-remove-global-network",
+          ),
         )
         .join("")
     : '<div class="empty">暂无全局白名单网段</div>';

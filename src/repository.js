@@ -1,4 +1,5 @@
 import { API_RATE_LIMIT_WINDOW_MS, DEFAULT_IP_LIMIT } from "./constants.js";
+import { parsePortRanges } from "./ports.js";
 import {
   createApiKey,
   hashPassword,
@@ -26,6 +27,33 @@ const activeIpQuery = `
     ORDER BY geo.id DESC LIMIT 1
   )
 `;
+
+function normalizeStoredPortRanges(value) {
+  try {
+    return parsePortRanges(value);
+  } catch {
+    const repaired = String(value || "")
+      .split(/[\s,，]+/)
+      .filter(Boolean)
+      .map((token) => {
+        const match = token.match(/^(\d{1,5})(?:-(\d{1,5}))?$/);
+        if (!match) return null;
+        const start = Math.max(1, Number(match[1]));
+        const end = Math.min(65535, Number(match[2] || match[1]));
+        return start <= end
+          ? start === end
+            ? String(start)
+            : `${start}-${end}`
+          : null;
+      })
+      .filter(Boolean);
+    try {
+      return parsePortRanges(repaired);
+    } catch {
+      return [];
+    }
+  }
+}
 
 export function createRepository(db, { onFirewallChange = () => {} } = {}) {
   const insertAudit = db.prepare(
@@ -531,8 +559,8 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         rows.map((row) => [row.key, JSON.parse(row.value)]),
       );
       return {
-        tcpPorts: values.protected_tcp_ports || [],
-        udpPorts: values.protected_udp_ports || [],
+        tcpPorts: normalizeStoredPortRanges(values.protected_tcp_ports),
+        udpPorts: normalizeStoredPortRanges(values.protected_udp_ports),
       };
     },
 

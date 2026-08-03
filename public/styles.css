@@ -525,6 +525,29 @@ header {
 .audit-row small {
   color: var(--muted);
 }
+.rule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 24px;
+  border-bottom: 1px solid #edf0ee;
+}
+.rule-row:last-child {
+  border-bottom: 0;
+}
+.rule-row > div {
+  min-width: 0;
+}
+.rule-row code {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.rule-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+}
 .device-id {
   color: inherit;
   overflow-wrap: anywhere;
