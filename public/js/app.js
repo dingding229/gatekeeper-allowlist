@@ -1,5 +1,8 @@
 import { apiRequest } from "./api.js";
-import { renderDashboard, renderHistory } from "./render.js";
+import { createFirewallController } from "./firewall.js";
+import { renderHistory } from "./history.js";
+import { renderDashboard } from "./render.js";
+import { createTabNavigation } from "./tabs.js";
 
 const $ = (selector) => document.querySelector(selector);
 let state = {
@@ -7,7 +10,6 @@ let state = {
   ips: [],
   devices: [],
   audit: [],
-  settings: {},
   stats: {},
 };
 let historyUserId = null;
@@ -42,8 +44,10 @@ function showDashboard() {
 async function loadDashboard() {
   try {
     state = await apiRequest("/api/admin/overview");
+    firewallController.invalidate();
     showDashboard();
     renderDashboard(state, $("#searchInput").value);
+    tabNavigation.activate(window.location.hash.slice(1), false);
   } catch (error) {
     if (error.status === 401) showLogin();
     else showToast("加载失败，请稍后重试");
@@ -121,39 +125,6 @@ $("#copySurgeModule").addEventListener("click", async () => {
 
 $("#searchInput").addEventListener("input", (event) => {
   renderDashboard(state, event.target.value);
-});
-
-$("#firewallForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    const result = await apiRequest("/api/admin/settings/firewall", {
-      method: "PATCH",
-      body: JSON.stringify({
-        tcpPorts: $("#tcpPorts").value,
-        udpPorts: $("#udpPorts").value,
-      }),
-    });
-    state.settings = result.settings;
-    renderDashboard(state, $("#searchInput").value);
-    showToast("端口设置已保存，正在同步防火墙");
-  } catch (error) {
-    showToast(
-      error.message === "invalid_port_ranges"
-        ? "端口范围格式不正确"
-        : "保存失败",
-    );
-  }
-});
-
-$("#refreshFirewallConfig").addEventListener("click", async () => {
-  try {
-    const result = await apiRequest("/api/admin/firewall-config");
-    state.firewallConfig = result.firewallConfig;
-    renderDashboard(state, $("#searchInput").value);
-    showToast("防火墙配置已刷新");
-  } catch {
-    showToast("防火墙配置刷新失败");
-  }
 });
 
 $("#apiRateForm").addEventListener("submit", async (event) => {
@@ -238,16 +209,17 @@ $("#adminCredentialsForm").addEventListener("submit", async (event) => {
   }
 });
 
-document.querySelector(".tabs").addEventListener("click", (event) => {
-  const tab = event.target.dataset.tab;
-  if (!tab) return;
-  document.querySelectorAll(".tabs button").forEach((button) => {
-    button.classList.toggle("active", button === event.target);
-  });
-  document.querySelectorAll(".tab-content").forEach((element) => {
-    element.classList.add("hidden");
-  });
-  $(`#${tab}Tab`).classList.remove("hidden");
+const firewallController = createFirewallController({ apiRequest, showToast });
+const tabNavigation = createTabNavigation({
+  onActivate: (tab) => {
+    if (
+      tab === "firewall" &&
+      state.applicationSettings &&
+      !firewallController.isLoaded()
+    ) {
+      firewallController.load().catch(() => {});
+    }
+  },
 });
 
 $("#userList").addEventListener("click", async (event) => {

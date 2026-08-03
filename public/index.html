@@ -82,12 +82,13 @@
           </article>
         </div>
 
-        <nav class="tabs">
-          <button class="active" data-tab="users">用户与网段</button
-          ><button data-tab="audit">操作记录</button
-          ><button data-tab="settings">系统设置</button
-          ><button data-tab="rules">全局规则</button
-          ><button data-tab="api">API 使用</button>
+        <nav class="tabs" role="tablist" aria-label="后台功能">
+          <button class="active" data-tab="users" role="tab">用户与网段</button
+          ><button data-tab="rules" role="tab">全局规则</button
+          ><button data-tab="firewall" role="tab">防火墙配置</button
+          ><button data-tab="audit" role="tab">操作记录</button
+          ><button data-tab="settings" role="tab">系统设置</button
+          ><button data-tab="api" role="tab">API 使用</button>
         </nav>
 
         <section id="usersTab" class="panel tab-content">
@@ -181,46 +182,50 @@
           <div id="auditList" class="audit-list"></div>
         </section>
 
+        <section id="firewallTab" class="panel tab-content hidden">
+          <div class="panel-head firewall-page-head">
+            <div>
+              <p class="eyebrow">NFTABLES POLICY</p>
+              <h2>防火墙配置</h2>
+              <p>查看服务端目标规则与宿主机实际同步状态，并设置受保护端口。</p>
+            </div>
+            <button id="refreshFirewallConfig" class="ghost" type="button">
+              刷新配置
+            </button>
+          </div>
+          <div id="firewallConfigSummary" class="firewall-config-summary">
+            <div class="empty">打开页面后读取配置</div>
+          </div>
+          <form id="firewallForm" class="settings-form firewall-editor">
+            <h3>受保护端口</h3>
+            <div class="form-grid two-columns">
+              <label
+                >TCP 端口或范围
+                <input id="tcpPorts" placeholder="例如：22, 3306, 8000-9000" />
+              </label>
+              <label
+                >UDP 端口或范围
+                <input
+                  id="udpPorts"
+                  placeholder="例如：53, 5000-5100；留空表示不限制"
+                />
+              </label>
+            </div>
+            <p class="muted">
+              合法端口为
+              1-65535，多个端口使用逗号分隔。保存后立即通知宿主机同步，定时器每分钟兜底。
+            </p>
+            <button class="primary" type="submit">保存并同步</button>
+          </form>
+        </section>
+
         <section id="settingsTab" class="panel tab-content hidden">
           <div class="panel-head">
             <div>
-              <h2>受限端口范围</h2>
-              <p>只有白名单网段能够访问以下宿主机端口</p>
+              <h2>系统设置</h2>
+              <p>调整客户端频率、数据保留和后台登录凭据</p>
             </div>
           </div>
-          <form id="firewallForm" class="settings-form">
-            <label
-              >TCP 端口或范围
-              <input id="tcpPorts" placeholder="例如：22, 3306, 8000-9000" />
-            </label>
-            <label
-              >UDP 端口或范围
-              <input
-                id="udpPorts"
-                placeholder="例如：53, 5000-5100；留空表示不限制"
-              />
-            </label>
-            <p class="muted">
-              多个端口使用逗号分隔。保存后由即时同步服务写入
-              nftables，每分钟定时器作为兜底。
-            </p>
-            <button class="primary" type="submit">保存端口设置</button>
-          </form>
-          <section class="settings-form firewall-config-panel">
-            <div class="config-heading">
-              <div>
-                <h3>当前防火墙配置</h3>
-                <p class="muted">只读显示服务端生成的生效白名单与端口规则。</p>
-              </div>
-              <button id="refreshFirewallConfig" class="ghost" type="button">
-                刷新
-              </button>
-            </div>
-            <div
-              id="firewallConfigSummary"
-              class="firewall-config-summary"
-            ></div>
-          </section>
           <form id="apiRateForm" class="settings-form">
             <h3>API 访问频率</h3>
             <label

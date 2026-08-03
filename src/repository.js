@@ -540,8 +540,6 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         devices,
         firewallStatus: this.getFirewallStatus(),
         firewallRevision: this.getFirewallRevision(),
-        firewallConfig: this.getFirewallConfig(),
-        settings: this.getFirewallSettings(),
         retentionSettings: this.getRetentionSettings(),
         applicationSettings: {
           serverVersion: SERVER_VERSION,

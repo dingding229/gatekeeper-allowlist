@@ -31,7 +31,7 @@ Authorization: Bearer awl_xxx
 省略 `ip` 时使用请求来源 IP；也可以显式传入一个地址：
 
 ```json
-{"ip":"203.0.113.8","source":"office"}
+{ "ip": "203.0.113.8", "source": "office" }
 ```
 
 服务端会把 IPv4 规范化为所属 `/24`，IPv6 规范化为所属 `/64`。新网段返回 `201`，已存在的网段返回 `200`。每个用户默认保留 3 个不同网段，管理员可在后台调整为 1–100 个；超出配额会淘汰最早加入的网段。每次成功上报都会写入历史记录。客户端可先通过 `https://64.ipcheck.ing/geo` 查询自己的信息，再附带 `ipInfo`；Surge 模块已自动完成此步骤。该展示信息不参与授权判断。
@@ -86,9 +86,9 @@ Surge 上报还必须包含当前 `moduleVersion` 和 `scriptVersion`。服务�
 ```json
 {
   "error": "module_update_required",
-  "serverVersion": "1.2.0",
-  "requiredModuleVersion": "1.2.0",
-  "requiredScriptVersion": "1.2.0"
+  "serverVersion": "2.0.0",
+  "requiredModuleVersion": "2.0.0",
+  "requiredScriptVersion": "2.0.0"
 }
 ```
 
@@ -108,20 +108,20 @@ GET /health
 ```
 
 ```json
-{"ok":true}
+{ "ok": true }
 ```
 
 ## 错误
 
-| 状态码 | 错误值 | 说明 |
-|---|---|---|
-| 400 | `invalid_ip` | IP 地址格式错误 |
-| 401 | `missing_api_key` | 未提供 Key |
-| 401 | `invalid_api_key` | Key 错误、已轮换或用户已停用 |
-| 403 | `network_blacklisted` | 该 IP 所属网段已被管理员拉黑 |
-| 400 | `invalid_device_id` | 设备 ID 格式无效 |
-| 409 | `device_limit_exceeded` | 该用户已达到 20 台已登记设备上限，需在后台移除旧设备 |
-| 429 | `rate_limit_exceeded` | 该用户的该设备在最短间隔内已访问客户端 API |
-| 500 | `internal_error` | 服务端异常 |
+| 状态码 | 错误值                  | 说明                                                 |
+| ------ | ----------------------- | ---------------------------------------------------- |
+| 400    | `invalid_ip`            | IP 地址格式错误                                      |
+| 401    | `missing_api_key`       | 未提供 Key                                           |
+| 401    | `invalid_api_key`       | Key 错误、已轮换或用户已停用                         |
+| 403    | `network_blacklisted`   | 该 IP 所属网段已被管理员拉黑                         |
+| 400    | `invalid_device_id`     | 设备 ID 格式无效                                     |
+| 409    | `device_limit_exceeded` | 该用户已达到 20 台已登记设备上限，需在后台移除旧设备 |
+| 429    | `rate_limit_exceeded`   | 该用户的该设备在最短间隔内已访问客户端 API           |
+| 500    | `internal_error`        | 服务端异常                                           |
 
 管理员接口供自带 Web 后台使用，通过 HttpOnly 会话 Cookie 鉴权，不作为公开集成接口。防火墙快照和版本通知接口只允许本机访问，Caddy 对公网统一返回 404。用户新增、淘汰、移除、清空、启停和端口设置变更后，宿主机即时同步服务会刷新 nftables；每分钟定时器作为失败兜底。

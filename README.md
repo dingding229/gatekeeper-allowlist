@@ -5,7 +5,7 @@
 主要功能：
 
 - 多用户 API Key，每个用户默认 3 个网段，可在后台调整为 1–100 个，按 FIFO 自动轮换。
-- 后台查看用户、网段和审计记录，设置受保护的 TCP/UDP 端口或端口范围。
+- 后台查看用户、网段和审计记录；独立“防火墙配置”页面显示目标规则、实际同步状态，并设置受保护的 TCP/UDP 端口或范围。
 - 后台显示上报 IP、网段、国家/地区/城市、运营商、服务器公网 IP 和用户历史 IP。
 - 支持清空单个用户当前网段而保留历史记录。
 - 支持删除用户、拉黑 `/24` 或 `/64` 网段、添加全局网段或指定用户网段，以及添加不占用户槽位的永久放行 IP；黑名单始终优先。
@@ -70,6 +70,8 @@ curl -fsSL https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/ma
 ```
 
 更新脚本会保留数据库、API Key、历史 IP、`.env` 和 HTTPS 证书，并自动迁移数据库。每次更新前后都会生成经完整性校验的宿主机数据库备份。默认保留已有 TCP/UDP 保护范围。端口支持逗号及范围，例如 `22,443,8000-9000`；输入 `none` 可清空。如果旧安装没有启用 nftables，脚本会主动询问是否启用，并在加载规则前确认当前 SSH 网段已经在白名单中。脚本使用临时文件生成并检查规则，检查通过后才会原子替换正式配置，最后强制验证 systemd、即时同步服务、兜底定时器和 nftables 规则表。
+
+Gatekeeper 2.0 将后台拆分为用户、全局规则、防火墙配置、操作记录、系统设置和 API 使用六个独立页面。防火墙完整快照改为进入该页面时按需读取，旧数据库和现有规则会在更新过程中自动兼容，无需重新创建用户。
 
 ## 使用 API
 
@@ -136,7 +138,7 @@ https://raw.githubusercontent.com/dingding229/gatekeeper-allowlist/main/surge/ga
 - `url`：填写完整 HTTPS 地址，如 `https://allowlist.example.com`。
 - `key`：后台创建的 `awl_` 开头 API Key。
 - `cooldown`：本地防重复上报秒数，默认 `30`，应不小于后台 API 请求间隔。
-设备 ID 由 Surge 自动生成并保存。Surge iOS 5.9.0+ 或 Mac 5.5.0+ 会显示“设备型号 · 系统”；旧版 Surge 无法提供型号时回退为 `Surge · iOS`、`Surge · macOS` 或 `Surge`。
+  设备 ID 由 Surge 自动生成并保存。Surge iOS 5.9.0+ 或 Mac 5.5.0+ 会显示“设备型号 · 系统”；旧版 Surge 无法提供型号时回退为 `Surge · iOS`、`Surge · macOS` 或 `Surge`。
 
 公共模板同样会在 `network-changed` 事件和自定义周期中上报，并提供手动刷新面板。Surge 会先通过 `64.ipcheck.ing/geo` 获取地区信息，但不用客户端字段决定放行 IP；Gatekeeper 始终以直连请求的来源 IP 为准。IPCheck 查询失败时仍会提交。服务端会将出口 IPv4 转为 `/24`，同一网段重复上报不会占用新槽位。
 

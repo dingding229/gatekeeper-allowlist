@@ -31,34 +31,6 @@ const locationText = (ip) =>
   [ip.country, ip.region, ip.city].filter(Boolean).join(" · ") ||
   "尚无地区信息，等待 Surge 下次成功查询";
 
-const formatRuleList = (values, empty = "无") =>
-  values?.length
-    ? values
-        .map((value) => `<code>${escapeHtml(String(value))}</code>`)
-        .join(" ")
-    : `<span class="muted">${empty}</span>`;
-
-function renderFirewallConfig(config) {
-  const status = config?.status || {};
-  const statusText =
-    status.success && !status.stale ? "已应用" : "待同步 / 异常";
-  const statusClass =
-    status.success && !status.stale ? "config-ok" : "config-warn";
-  return `
-    <div class="config-status ${statusClass}"><strong>${statusText}</strong>
-      <span>配置 revision ${config?.revision ?? 0} · 已应用 ${status.appliedRevision ?? 0}</span>
-      ${status.error ? `<small>${escapeHtml(status.error)}</small>` : ""}
-    </div>
-    <dl class="firewall-config-grid">
-      <div><dt>TCP 保护端口</dt><dd>${formatRuleList(config?.tcpPorts)}</dd></div>
-      <div><dt>UDP 保护端口</dt><dd>${formatRuleList(config?.udpPorts)}</dd></div>
-      <div><dt>生效 IPv4 白名单（${config?.ipv4?.length || 0}）</dt><dd>${formatRuleList(config?.ipv4)}</dd></div>
-      <div><dt>生效 IPv6 白名单（${config?.ipv6?.length || 0}）</dt><dd>${formatRuleList(config?.ipv6)}</dd></div>
-      <div><dt>最近同步</dt><dd>${status.appliedAt ? escapeHtml(formatTime(status.appliedAt)) : "尚无同步记录"}</dd></div>
-      <div><dt>服务端生成</dt><dd>${config?.generatedAt ? escapeHtml(formatTime(config.generatedAt)) : "—"}</dd></div>
-    </dl>`;
-}
-
 const renderRuleRow = (value, detail, action, attribute, label = "移除") =>
   `<div class="rule-row"><div><code>${escapeHtml(value)}</code><small>${escapeHtml(detail)}</small></div><button class="danger-link" ${attribute}="${escapeHtml(String(action))}">${label}</button></div>`;
 
@@ -180,14 +152,6 @@ export function renderDashboard(state, query = "") {
     ?.available
     ? "通过 IPCheck.ing 查询，最多缓存 10 分钟"
     : `IPCheck.ing 查询失败，30 秒后重试${state.server?.errors?.[0] ? `：${state.server.errors[0]}` : ""}`;
-  document.querySelector("#tcpPorts").value = (
-    state.settings?.tcpPorts || []
-  ).join(", ");
-  document.querySelector("#udpPorts").value = (
-    state.settings?.udpPorts || []
-  ).join(", ");
-  document.querySelector("#firewallConfigSummary").innerHTML =
-    renderFirewallConfig(state.firewallConfig);
   document.querySelector("#apiRateLimitSeconds").value =
     state.applicationSettings?.apiRateLimitSeconds || 60;
   document.querySelector("#adminUsername").value =
@@ -291,26 +255,4 @@ export function renderDashboard(state, query = "") {
         )
         .join("")
     : '<div class="empty">暂无全局白名单网段</div>';
-}
-
-export function renderHistory(rows) {
-  if (!rows.length) return '<div class="empty">暂无历史上报记录</div>';
-  return `<div class="history-scroll"><table class="history-table"><thead><tr><th>上报 IP / 网段</th><th>地区与运营商</th><th>结果</th><th>时间</th></tr></thead><tbody>${rows
-    .map(
-      (row) => `<tr>
-        <td><code>${escapeHtml(row.observed_ip)}</code><br><small>${escapeHtml(row.network)} · ${escapeHtml(row.source)}</small></td>
-        <td>${escapeHtml(locationText(row))}<br><small>${escapeHtml(row.isp || "—")}${row.geo_source ? ` · ${escapeHtml(row.geo_source)}` : ""}</small></td>
-        <td>${
-          row.event === "removed"
-            ? "已删除"
-            : row.event === "evicted"
-              ? "自动淘汰"
-              : row.event === "added"
-                ? "新增"
-                : "已上报"
-        }</td>
-        <td><small>${formatTime(row.created_at)}</small></td>
-      </tr>`,
-    )
-    .join("")}</tbody></table></div>`;
 }
