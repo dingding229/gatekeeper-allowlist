@@ -118,6 +118,74 @@ select:focus {
   background: #f0fdf4;
   color: #166534;
 }
+.firewall-config-panel {
+  margin-top: 20px;
+}
+.config-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.config-heading h3 {
+  margin: 0;
+}
+.config-heading p {
+  margin: 4px 0 0;
+  font-weight: 400;
+}
+.firewall-config-summary {
+  margin-top: 18px;
+}
+.config-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.config-status span,
+.config-status small {
+  color: var(--muted);
+}
+.config-status small {
+  flex-basis: 100%;
+}
+.config-ok {
+  background: #f0fdf4;
+  color: #166534;
+}
+.config-warn {
+  background: #fff7ed;
+  color: #9a3412;
+}
+.firewall-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 0;
+}
+.firewall-config-grid > div {
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fbfcfb;
+}
+.firewall-config-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.firewall-config-grid dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+.firewall-config-grid code {
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+}
 button {
   border: 0;
   font: inherit;

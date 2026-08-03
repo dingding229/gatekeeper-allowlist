@@ -112,6 +112,13 @@ export function createAdminRouter({ repository, adminAuth, config, ipInfo }) {
     res.json(overview);
   });
 
+  router.get("/firewall-config", adminAuth, (_req, res) => {
+    return res.json({
+      ok: true,
+      firewallConfig: repository.getFirewallConfig(),
+    });
+  });
+
   router.patch("/settings/firewall", adminAuth, (req, res) => {
     try {
       const tcpPorts = parsePortRanges(req.body?.tcpPorts);

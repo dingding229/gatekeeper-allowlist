@@ -144,6 +144,17 @@ $("#firewallForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("#refreshFirewallConfig").addEventListener("click", async () => {
+  try {
+    const result = await apiRequest("/api/admin/firewall-config");
+    state.firewallConfig = result.firewallConfig;
+    renderDashboard(state, $("#searchInput").value);
+    showToast("防火墙配置已刷新");
+  } catch {
+    showToast("防火墙配置刷新失败");
+  }
+});
+
 $("#apiRateForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {

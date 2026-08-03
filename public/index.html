@@ -206,6 +206,21 @@
             </p>
             <button class="primary" type="submit">保存端口设置</button>
           </form>
+          <section class="settings-form firewall-config-panel">
+            <div class="config-heading">
+              <div>
+                <h3>当前防火墙配置</h3>
+                <p class="muted">只读显示服务端生成的生效白名单与端口规则。</p>
+              </div>
+              <button id="refreshFirewallConfig" class="ghost" type="button">
+                刷新
+              </button>
+            </div>
+            <div
+              id="firewallConfigSummary"
+              class="firewall-config-summary"
+            ></div>
+          </section>
           <form id="apiRateForm" class="settings-form">
             <h3>API 访问频率</h3>
             <label

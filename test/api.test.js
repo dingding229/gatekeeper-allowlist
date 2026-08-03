@@ -422,6 +422,23 @@ test("firewall heartbeat and retention settings appear in admin overview", async
   ).json();
   assert.equal(overview.firewallStatus.success, true);
   assert.equal(overview.firewallStatus.ipv4_count, 2);
+  assert.deepEqual(overview.firewallConfig.status, {
+    appliedRevision: 0,
+    success: true,
+    stale: false,
+    updatedAt: overview.firewallConfig.status.updatedAt,
+    appliedAt: overview.firewallConfig.status.appliedAt,
+    ipv4Count: 2,
+    ipv6Count: 1,
+    tcpPortCount: 1,
+    udpPortCount: 0,
+    error: null,
+  });
+  const configResponse = await fetch(`${baseUrl}/api/admin/firewall-config`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(configResponse.status, 200);
+  assert.equal((await configResponse.json()).firewallConfig.revision, 0);
   assert.deepEqual(overview.retentionSettings, {
     historyDays: 30,
     auditDays: 90,

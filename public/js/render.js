@@ -31,6 +31,34 @@ const locationText = (ip) =>
   [ip.country, ip.region, ip.city].filter(Boolean).join(" · ") ||
   "尚无地区信息，等待 Surge 下次成功查询";
 
+const formatRuleList = (values, empty = "无") =>
+  values?.length
+    ? values
+        .map((value) => `<code>${escapeHtml(String(value))}</code>`)
+        .join(" ")
+    : `<span class="muted">${empty}</span>`;
+
+function renderFirewallConfig(config) {
+  const status = config?.status || {};
+  const statusText =
+    status.success && !status.stale ? "已应用" : "待同步 / 异常";
+  const statusClass =
+    status.success && !status.stale ? "config-ok" : "config-warn";
+  return `
+    <div class="config-status ${statusClass}"><strong>${statusText}</strong>
+      <span>配置 revision ${config?.revision ?? 0} · 已应用 ${status.appliedRevision ?? 0}</span>
+      ${status.error ? `<small>${escapeHtml(status.error)}</small>` : ""}
+    </div>
+    <dl class="firewall-config-grid">
+      <div><dt>TCP 保护端口</dt><dd>${formatRuleList(config?.tcpPorts)}</dd></div>
+      <div><dt>UDP 保护端口</dt><dd>${formatRuleList(config?.udpPorts)}</dd></div>
+      <div><dt>生效 IPv4 白名单（${config?.ipv4?.length || 0}）</dt><dd>${formatRuleList(config?.ipv4)}</dd></div>
+      <div><dt>生效 IPv6 白名单（${config?.ipv6?.length || 0}）</dt><dd>${formatRuleList(config?.ipv6)}</dd></div>
+      <div><dt>最近同步</dt><dd>${status.appliedAt ? escapeHtml(formatTime(status.appliedAt)) : "尚无同步记录"}</dd></div>
+      <div><dt>服务端生成</dt><dd>${config?.generatedAt ? escapeHtml(formatTime(config.generatedAt)) : "—"}</dd></div>
+    </dl>`;
+}
+
 function renderIpRows(ips) {
   if (!ips.length)
     return '<tr><td colspan="4"><small>尚未添加网段</small></td></tr>';
@@ -156,6 +184,8 @@ export function renderDashboard(state, query = "") {
   document.querySelector("#udpPorts").value = (
     state.settings?.udpPorts || []
   ).join(", ");
+  document.querySelector("#firewallConfigSummary").innerHTML =
+    renderFirewallConfig(state.firewallConfig);
   document.querySelector("#apiRateLimitSeconds").value =
     state.applicationSettings?.apiRateLimitSeconds || 60;
   document.querySelector("#adminUsername").value =

@@ -505,6 +505,7 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         devices,
         firewallStatus: this.getFirewallStatus(),
         firewallRevision: this.getFirewallRevision(),
+        firewallConfig: this.getFirewallConfig(),
         settings: this.getFirewallSettings(),
         retentionSettings: this.getRetentionSettings(),
         applicationSettings: {
@@ -706,6 +707,31 @@ export function createRepository(db, { onFirewallChange = () => {} } = {}) {
         ...status,
         success: Boolean(status?.success),
         stale: !Number.isFinite(updatedAt) || Date.now() - updatedAt > 150_000,
+      };
+    },
+
+    getFirewallConfig() {
+      const snapshot = this.getFirewallSnapshot();
+      const status = this.getFirewallStatus();
+      return {
+        revision: snapshot.revision,
+        generatedAt: snapshot.generatedAt,
+        tcpPorts: snapshot.tcpPorts,
+        udpPorts: snapshot.udpPorts,
+        ipv4: snapshot.ipv4,
+        ipv6: snapshot.ipv6,
+        status: {
+          appliedRevision: status.applied_revision ?? 0,
+          success: status.success,
+          stale: status.stale,
+          updatedAt: status.updated_at || null,
+          appliedAt: status.applied_at || null,
+          ipv4Count: status.ipv4_count ?? 0,
+          ipv6Count: status.ipv6_count ?? 0,
+          tcpPortCount: status.tcp_port_count ?? 0,
+          udpPortCount: status.udp_port_count ?? 0,
+          error: status.error || null,
+        },
       };
     },
 
