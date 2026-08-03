@@ -231,6 +231,9 @@ export function openDatabase(filename) {
   db.prepare(
     "UPDATE settings SET value = '7' WHERE key = 'history_retention_days' AND value = '180'",
   ).run();
+  db.prepare(
+    "UPDATE ip_history SET event = CASE WHEN status = 'added' THEN 'added' ELSE 'reported' END WHERE event = 'reported'",
+  ).run();
   migrateNetworks(db);
   return db;
 }

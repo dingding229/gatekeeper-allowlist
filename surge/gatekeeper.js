@@ -1,6 +1,6 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
-var SCRIPT_VERSION = "1.2.12";
+var SCRIPT_VERSION = "1.2.13";
 
 function argumentsFromSurge() {
   var result = {};
