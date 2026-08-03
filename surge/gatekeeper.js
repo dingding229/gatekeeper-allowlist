@@ -1,6 +1,6 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
-var SCRIPT_VERSION = "1.2.7";
+var SCRIPT_VERSION = "1.2.8";
 
 function argumentsFromSurge() {
   var result = {};
@@ -49,6 +49,7 @@ var deviceName = [deviceModel || "Surge", surgeSystem]
   .join(" · ")
   .slice(0, 64);
 var STATE_KEY = "gatekeeper_allowlist_state_" + deviceId;
+var LAST_CHANGE_KEY = "gatekeeper_last_change_" + deviceId;
 var NEXT_REPORT_KEY = "gatekeeper_next_report_" + deviceId;
 var NEXT_PERIODIC_CHECK_KEY = "gatekeeper_next_periodic_check_" + deviceId;
 var PERIODIC_CHECK_INTERVAL_MS = 10 * 60 * 1000;
@@ -226,6 +227,20 @@ if (
             return;
           }
 
+          if (data.status !== "added" && data.status !== "existing") {
+            var invalidStatusReason =
+              "服务端响应异常：缺少有效的网段状态，实际为 " +
+              String(data.status || "未知");
+            $persistentStore.write("0", NEXT_REPORT_KEY);
+            $notification.post(
+              "Gatekeeper 自动加白",
+              "上报失败",
+              invalidStatusReason,
+            );
+            finish("Gatekeeper：服务端响应异常", invalidStatusReason, false);
+            return;
+          }
+
           var serverCooldown = Number(data.rateLimitSeconds || cooldownSeconds);
           if (isFinite(serverCooldown) && serverCooldown > 0) {
             $persistentStore.write(
@@ -257,8 +272,42 @@ if (
           }
           var title =
             "Gatekeeper " + data.slots + "/" + data.limit + " · " + data.ip;
+          var statusText;
+          var recentChangeText = "";
+          if (data.status === "added") {
+            statusText = "新网段已加入白名单";
+            if (data.evicted) {
+              statusText += " · 已自动淘汰 " + String(data.evicted);
+            }
+            $persistentStore.write(
+              JSON.stringify({
+                network: data.ip,
+                evicted: data.evicted || "",
+                at: Date.now(),
+              }),
+              LAST_CHANGE_KEY,
+            );
+          } else {
+            statusText = "检查确认：当前网段已在白名单";
+            try {
+              var lastChange = JSON.parse(
+                $persistentStore.read(LAST_CHANGE_KEY) || "null",
+              );
+              if (lastChange && lastChange.network === data.ip) {
+                recentChangeText =
+                  "\n最近新增：" +
+                  new Date(Number(lastChange.at)).toLocaleString() +
+                  (lastChange.evicted
+                    ? " · 淘汰 " + String(lastChange.evicted)
+                    : "");
+              }
+            } catch (_lastChangeError) {
+              recentChangeText = "";
+            }
+          }
           var content =
-            (data.status === "added" ? "已加入网段" : "网段已在白名单") +
+            statusText +
+            recentChangeText +
             (data.ipInfoRecorded
               ? " · IP 信息已更新"
               : " · " + (ipInfoError || "IP 信息查询失败")) +

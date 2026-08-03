@@ -95,6 +95,8 @@ function runSurge({
 
 test("Surge panel exposes module, script, and server versions", () => {
   const { result } = runSurge();
+  assert.match(result.content, /新网段已加入白名单/);
+  assert.doesNotMatch(result.content, /检查确认：当前网段已在白名单/);
   assert.match(
     result.content,
     new RegExp(`版本：模块 v${SURGE_MODULE_VERSION}`),
@@ -113,6 +115,53 @@ test("Surge panel exposes module, script, and server versions", () => {
     publicModule,
     new RegExp(`moduleVersion=${SURGE_MODULE_VERSION}`),
   );
+});
+
+test("Surge distinguishes existing networks from newly added networks", () => {
+  const { result } = runSurge({
+    initialStore: {
+      gatekeeper_last_change_device_test_01: JSON.stringify({
+        network: "8.8.8.0/24",
+        evicted: "1.1.1.0/24",
+        at: Date.now() - 60_000,
+      }),
+    },
+    postResponse: {
+      status: 200,
+      body: {
+        ok: true,
+        status: "existing",
+        slots: 2,
+        limit: 3,
+        ip: "8.8.8.0/24",
+        rateLimitSeconds: 30,
+        ips: [{ ip: "8.8.8.0/24" }],
+      },
+    },
+  });
+  assert.match(result.content, /检查确认：当前网段已在白名单/);
+  assert.match(result.content, /最近新增：/);
+  assert.match(result.content, /淘汰 1\.1\.1\.0\/24/);
+});
+
+test("Surge rejects unknown success statuses instead of claiming allowlist membership", () => {
+  const { result, notifications } = runSurge({
+    postResponse: {
+      status: 200,
+      body: {
+        ok: true,
+        status: "unknown",
+        slots: 1,
+        limit: 3,
+        ip: "8.8.8.0/24",
+        ips: [{ ip: "8.8.8.0/24" }],
+      },
+    },
+  });
+  assert.equal(result.style, "error");
+  assert.match(result.title, /服务端响应异常/);
+  assert.match(result.content, /实际为 unknown/);
+  assert.ok(notifications.some((items) => items[1] === "上报失败"));
 });
 
 test("Surge provides a one-tap module update when versions are rejected", () => {
