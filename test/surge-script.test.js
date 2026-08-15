@@ -196,6 +196,7 @@ test("Surge provides a one-tap module update when versions are rejected", () => 
 
 test("Surge translates rate limiting into a clear reason without status codes", () => {
   const { result } = runSurge({
+    trigger: { type: "generic", name: "gatekeeper_1_panel" },
     postResponse: {
       status: 429,
       body: { error: "rate_limit_exceeded", retryAfter: 18 },
@@ -205,6 +206,19 @@ test("Surge translates rate limiting into a clear reason without status codes", 
   assert.doesNotMatch(result.content, /429|HTTP/);
 });
 
+test("Surge quietly merges automatic triggers rejected by server cooldown", () => {
+  const { result, notifications } = runSurge({
+    postResponse: {
+      status: 429,
+      body: { error: "rate_limit_exceeded", retryAfter: 18 },
+    },
+  });
+  assert.equal(result.style, "good");
+  assert.match(result.title, /请求已合并/);
+  assert.doesNotMatch(result.content, /请求过于频繁|429/);
+  assert.equal(notifications.length, 0);
+});
+
 test("Surge suppresses overlapping triggers during the local cooldown", () => {
   const future = Date.now() + 20_000;
   const { result, requests } = runSurge({
@@ -212,6 +226,17 @@ test("Surge suppresses overlapping triggers during the local cooldown", () => {
   });
   assert.equal(requests, 0);
   assert.match(result.content, /刚刚已经触发过上报/);
+});
+
+test("Surge suppresses concurrent IP checks across all trigger types", () => {
+  const future = Date.now() + 20_000;
+  const { result, requests, posts } = runSurge({
+    initialStore: { gatekeeper_in_flight_device_test_01: String(future) },
+    trigger: { type: "event", name: "gatekeeper_1_event" },
+  });
+  assert.equal(requests, 0);
+  assert.equal(posts, 0);
+  assert.match(result.title, /请求已合并/);
 });
 
 test("Surge network change events bypass the local cooldown", () => {
@@ -227,6 +252,20 @@ test("Surge network change events bypass the local cooldown", () => {
     Number(store.get("gatekeeper_next_periodic_check_device_test_01")) >=
       before + 599_000,
   );
+});
+
+test("Surge does not retry the same attempted IP during server cooldown", () => {
+  const future = Date.now() + 20_000;
+  const { result, requests, posts } = runSurge({
+    initialStore: {
+      gatekeeper_next_report_device_test_01: String(future),
+      gatekeeper_last_attempted_ip_device_test_01: "8.8.8.8",
+    },
+    trigger: { type: "event", name: "gatekeeper_1_event" },
+  });
+  assert.equal(requests, 1);
+  assert.equal(posts, 0);
+  assert.match(result.title, /等待服务端冷却/);
 });
 
 test("Surge postpones periodic self-healing after a network change", () => {
@@ -281,14 +320,24 @@ test("Surge displays its platform when the device model is unavailable", () => {
   assert.equal(payload.deviceName, "Surge · macOS");
 });
 
-test("Surge submits on every trigger even when the public IP is unchanged", () => {
-  const { requests, posts } = runSurge({
+test("Surge skips automatic submission when the public IP is unchanged", () => {
+  const { result, requests, posts } = runSurge({
     initialStore: {
       gatekeeper_last_reported_ip_device_test_01: "8.8.8.8",
     },
   });
-  assert.equal(requests, 2);
-  assert.equal(posts, 1);
+  assert.equal(requests, 1);
+  assert.equal(posts, 0);
+  assert.match(result.title, /出口 IP 未变化/);
+  assert.match(result.content, /无需重复提交白名单/);
+});
+
+test("Surge records the public IP only after a successful submission", () => {
+  const { store } = runSurge({ lookupIp: "8.8.4.4" });
+  assert.equal(
+    store.get("gatekeeper_last_reported_ip_device_test_01"),
+    "8.8.4.4",
+  );
 });
 
 test("Surge submits IPCheck metadata but trusts the request source IP", () => {

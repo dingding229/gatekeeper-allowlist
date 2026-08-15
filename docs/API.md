@@ -86,9 +86,9 @@ Surge 上报还必须包含当前 `moduleVersion` 和 `scriptVersion`。服务�
 ```json
 {
   "error": "module_update_required",
-  "serverVersion": "2.0.0",
-  "requiredModuleVersion": "2.0.0",
-  "requiredScriptVersion": "2.0.0"
+  "serverVersion": "2.0.1",
+  "requiredModuleVersion": "2.0.1",
+  "requiredScriptVersion": "2.0.1"
 }
 ```
 

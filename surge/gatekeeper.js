@@ -1,6 +1,6 @@
 /* Gatekeeper Surge automatic allowlist client. */
 
-var SCRIPT_VERSION = "2.0.0";
+var SCRIPT_VERSION = "2.0.1";
 
 function argumentsFromSurge() {
   var result = {};
@@ -50,11 +50,13 @@ var deviceName = [deviceModel || "Surge", surgeSystem]
   .slice(0, 64);
 var STATE_KEY = "gatekeeper_allowlist_state_" + deviceId;
 var LAST_CHANGE_KEY = "gatekeeper_last_change_" + deviceId;
+var LAST_REPORTED_IP_KEY = "gatekeeper_last_reported_ip_" + deviceId;
+var LAST_ATTEMPTED_IP_KEY = "gatekeeper_last_attempted_ip_" + deviceId;
 var NEXT_REPORT_KEY = "gatekeeper_next_report_" + deviceId;
 var NEXT_PERIODIC_CHECK_KEY = "gatekeeper_next_periodic_check_" + deviceId;
+var IN_FLIGHT_KEY = "gatekeeper_in_flight_" + deviceId;
 var PERIODIC_CHECK_INTERVAL_MS = 10 * 60 * 1000;
-var scriptContext =
-  typeof $script === "object" && $script ? $script : {};
+var scriptContext = typeof $script === "object" && $script ? $script : {};
 var isNetworkChange =
   String(scriptContext.type || "") === "event" ||
   /_event$/.test(String(scriptContext.name || ""));
@@ -139,6 +141,7 @@ if (
 } else {
   var now = Date.now();
   var nextAllowedAt = Number($persistentStore.read(NEXT_REPORT_KEY) || 0);
+  var inFlightUntil = Number($persistentStore.read(IN_FLIGHT_KEY) || 0);
   var nextPeriodicCheckAt = Number(
     $persistentStore.read(NEXT_PERIODIC_CHECK_KEY) || 0,
   );
@@ -148,7 +151,13 @@ if (
       NEXT_PERIODIC_CHECK_KEY,
     );
   }
-  if (isPeriodicCheck && nextPeriodicCheckAt > now) {
+  if (inFlightUntil > now) {
+    finish(
+      "Gatekeeper：请求已合并",
+      "已有一次 IP 检查正在进行，本次触发无需重复请求",
+      true,
+    );
+  } else if (isPeriodicCheck && nextPeriodicCheckAt > now) {
     finish(
       "Gatekeeper：定时自愈已延后",
       "网络刚刚发生变化，将在 " +
@@ -165,12 +174,17 @@ if (
       true,
     );
   } else {
-    $persistentStore.write(
-      String(now + cooldownSeconds * 1000),
-      NEXT_REPORT_KEY,
-    );
+    $persistentStore.write(String(now + 30 * 1000), IN_FLIGHT_KEY);
+
+    function clearInFlight() {
+      $persistentStore.write("0", IN_FLIGHT_KEY);
+    }
 
     function report(ipInfo, ipInfoError) {
+      $persistentStore.write(
+        String(Date.now() + cooldownSeconds * 1000),
+        NEXT_REPORT_KEY,
+      );
       var payload = {
         source: "surge",
         deviceId: deviceId,
@@ -193,6 +207,7 @@ if (
           timeout: 15,
         },
         function (error, response, body) {
+          clearInFlight();
           var status = response && (response.status || response.statusCode);
           var data;
           try {
@@ -208,6 +223,14 @@ if (
                 String(Date.now() + Number(data.retryAfter || 1) * 1000),
                 NEXT_REPORT_KEY,
               );
+              if (isNetworkChange || isPeriodicCheck) {
+                finish(
+                  "Gatekeeper：请求已合并",
+                  "服务端仍在冷却，本次自动触发已跳过；稍后会自动检查",
+                  true,
+                );
+                return;
+              }
             } else {
               $persistentStore.write("0", NEXT_REPORT_KEY);
             }
@@ -247,6 +270,10 @@ if (
               String(Date.now() + serverCooldown * 1000),
               NEXT_REPORT_KEY,
             );
+          }
+          if (ipInfo && ipInfo.ip) {
+            $persistentStore.write(String(ipInfo.ip), LAST_REPORTED_IP_KEY);
+            $persistentStore.write(String(ipInfo.ip), LAST_ATTEMPTED_IP_KEY);
           }
           var networks = Array.isArray(data.ips)
             ? data.ips.map(function (item) {
@@ -343,8 +370,18 @@ if (
       },
       function (error, response, body) {
         var status = response && (response.status || response.statusCode);
-        if (error || status < 200 || status >= 300)
+        if (error || status < 200 || status >= 300) {
+          if (isNetworkChange && nextAllowedAt > Date.now()) {
+            clearInFlight();
+            finish(
+              "Gatekeeper：等待下次检查",
+              "出口 IP 查询失败且服务端仍在冷却，本次未重复上报",
+              true,
+            );
+            return;
+          }
           return report(null, "IPCheck.ing 查询失败，请检查直连规则");
+        }
         var fields = {};
         String(body || "")
           .split(/\r?\n/)
@@ -355,18 +392,55 @@ if (
                 .slice(separator + 1)
                 .trim();
           });
+        var currentIp = String(fields.IP || "").trim();
+        var lastReportedIp = String(
+          $persistentStore.read(LAST_REPORTED_IP_KEY) || "",
+        ).trim();
+        var lastAttemptedIp = String(
+          $persistentStore.read(LAST_ATTEMPTED_IP_KEY) || "",
+        ).trim();
+        if (
+          currentIp &&
+          currentIp === lastReportedIp &&
+          (isNetworkChange || isPeriodicCheck)
+        ) {
+          clearInFlight();
+          finish(
+            "Gatekeeper：出口 IP 未变化",
+            "当前出口 IP 仍为 " + currentIp + "，无需重复提交白名单",
+            true,
+          );
+          return;
+        }
+        if (
+          currentIp &&
+          currentIp === lastAttemptedIp &&
+          nextAllowedAt > Date.now() &&
+          (isNetworkChange || isPeriodicCheck)
+        ) {
+          clearInFlight();
+          finish(
+            "Gatekeeper：等待服务端冷却",
+            "该出口 IP 刚刚已经尝试提交，本次自动触发已合并",
+            true,
+          );
+          return;
+        }
+        if (currentIp) {
+          $persistentStore.write(currentIp, LAST_ATTEMPTED_IP_KEY);
+        }
         report(
-          fields.IP
+          currentIp
             ? {
                 source: "ipcheck.ing",
-                ip: fields.IP,
+                ip: currentIp,
                 country: fields.Country || "",
                 region: fields.Region || "",
                 city: fields.City || "",
                 isp: fields.Org || "",
               }
             : null,
-          fields.IP ? null : "IPCheck.ing 返回内容无法识别",
+          currentIp ? null : "IPCheck.ing 返回内容无法识别",
         );
       },
     );
